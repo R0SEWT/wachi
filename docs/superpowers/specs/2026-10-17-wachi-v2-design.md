@@ -27,8 +27,8 @@ El resultado sirve a tres cosas a la vez:
 - **Repo nuevo** (opción A del brainstorming): monorepo `api/` + `web/`. El Wachi viejo
   queda como repo de investigación y sigue produciendo el archivo de eventos hasta que
   exista `sidpol-lake`.
-- **Backend en gorgo** detrás de Tailscale Funnel; cuando Rody recupere `sudo` en la
-  4060 se mueve allá con el mismo mecanismo.
+- **Backend en la 4060** (WSL Ubuntu 24.04, alias ssh `4060`) detrás de Tailscale Funnel.
+  Rody recuperó `sudo` el 2026-10-17; gorgo queda como alternativa con el mismo mecanismo.
 - El código del motor **sale del script del experimento**
   (`scripts/experiments/comparacion_ruteo.py`, rama `exp/comparacion-ruteo`, PR #12):
   no se escribe de cero.
@@ -191,12 +191,12 @@ solo devuelve agregados por ruta.
 
 ## 8. Despliegue
 
-- **Backend:** clon en `/shared/Code/wachi` (gorgo) o el equivalente en la 4060. Servicio
+- **Backend:** clon en `~/wachi` en la 4060 (o `/shared/Code/wachi` en gorgo). Servicio
   `systemd --user` (`loginctl enable-linger r0sewt`), `ExecStart=uv run uvicorn
   wachi.api:app --port 8000`, `Nice=10`, `Restart=on-failure`. Sin Docker ni `sudo`.
-- **Exposición:** `tailscale funnel 8000` → `https://<host>.tail9f1c87.ts.net`. Requiere
-  Tailscale instalado en el host (paso humano con `sudo`) y Funnel activado en el panel
-  del tailnet (paso humano).
+- **Exposición:** `tailscale funnel 8000` → `https://wsl-lizfer-4060.taile3f034.ts.net`
+  (tailnet de Sttep, donde vive la 4060; Funnel activado el 2026-10-17). Si el backend se
+  mueve a un host del tailnet de Rody, hay que activar Funnel allí.
 - **PWA:** Netlify, sitio `wachi-rosewt`, ya con dominio y sin badge. `web/_redirects`:
   `/api/*  https://<host>.tail9f1c87.ts.net/:splat  200`. Netlify se conecta al repo
   (`web/` como directorio de publicación) para que cada push a `main` publique.
@@ -260,4 +260,4 @@ aplicación:
    abre después.
 2. **Licencia** del repo nuevo (recomendación: MIT para el código; los datos no se
    publican).
-3. **Dos pasos con `sudo`:** instalar Tailscale en gorgo y activar Funnel en el tailnet.
+3. ~~Dos pasos con `sudo`~~ Resuelto: la 4060 ya tiene Tailscale y Funnel activos.
