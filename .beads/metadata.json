@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "wachi_app",
+  "project_id": "356507df-06cf-48e1-9449-da695a52a0a7"
+}
