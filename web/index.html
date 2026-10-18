@@ -35,7 +35,7 @@
 
       <div class="hud-actions">
         <!-- Selector horario -->
-        <button id="btnTimeSelect" class="chip-hud" aria-label="Cambiar horario">
+        <button id="btnTimeSelect" class="chip-hud hidden" aria-label="Cambiar horario">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
           <span id="timeLabel">20:30 (Noche)</span>
         </button>
@@ -159,13 +159,14 @@
             <span>Comparar rutas</span>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
           </button>
+          <p id="routeError" class="route-error hidden"></p>
         </div>
 
         <!-- PANTALLA 2: Comparación de Rutas -->
         <div id="screenCompare" class="screen-view">
           <div class="screen-header">
             <h2 class="section-title">Elige cómo caminar</h2>
-            <span class="badge-time-selected" id="badgeCurrentTime">20:30 h</span>
+            <span class="badge-time-selected hidden" id="badgeCurrentTime">20:30 h</span>
           </div>
 
           <div class="route-cards-container">
@@ -179,11 +180,11 @@
                 </div>
                 <div class="card-metric-primary">
                   <span class="delta-time">+3 min</span>
-                  <span class="delta-desc">· Evita 2 esquinas con robo de celular</span>
+                  <span class="delta-desc">· calculando…</span>
                 </div>
                 <div class="card-metric-secondary">
                   <span class="icon-sparse">◌</span>
-                  <span class="sparse-desc">1 tramo con datos insuficientes</span>
+                  <span class="sparse-desc"></span>
                 </div>
               </div>
             </div>
@@ -198,7 +199,7 @@
                 </div>
                 <div class="card-metric-primary alert-exposure">
                   <span class="delta-time">Directa</span>
-                  <span class="delta-desc">· Cruza tramo con alta incidencia nocturna</span>
+                  <span class="delta-desc">· La más corta</span>
                 </div>
               </div>
             </div>
@@ -215,6 +216,7 @@
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
             </button>
           </div>
+          <p id="dataAsOf" class="data-asof"></p>
         </div>
 
         <!-- PANTALLA 3: Detalle de Ruta (Hoja de Tramos) -->
@@ -236,7 +238,7 @@
               <div class="segment-dot"></div>
               <div class="segment-info">
                 <strong>Av. Arequipa (cdras. 26 a 14)</strong>
-                <p>Alameda central con ciclovía, veredas anchas y módulos de serenazgo activos.</p>
+                <p>Alameda central con ciclovía, veredas anchas y comercio activo.</p>
               </div>
             </li>
             <li class="segment-item avoided">
@@ -250,14 +252,14 @@
               <div class="segment-dot sparse-dot">◌</div>
               <div class="segment-info">
                 <strong class="sparse-title">Av. Alejandro Tirado (tramo con datos insuficientes)</strong>
-                <p>Transición residencial entre Lince y Jesús María. Camina atento por la acera iluminada.</p>
+                <p>Transición residencial entre Lince y Jesús María. Camina atento en este tramo.</p>
               </div>
             </li>
             <li class="segment-item safe">
               <div class="segment-dot"></div>
               <div class="segment-info">
                 <strong>Av. Cuba (cdras. 13 a 11)</strong>
-                <p>Eje comercial principal de Jesús María con iluminación LED y comercio activo.</p>
+                <p>Eje comercial de Jesús María</p>
               </div>
             </li>
           </ul>
@@ -280,7 +282,7 @@
                 <span class="turn-time-chip">~2 min</span>
               </div>
               <strong class="turn-instruction">Continúa por Av. Arequipa</strong>
-              <span class="turn-landmark">👁 Hito: Vereda ancha y paradero con luz activa</span>
+              <span class="turn-landmark">👁 Hito: Vereda ancha y paradero cercano</span>
             </div>
           </div>
 

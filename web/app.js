@@ -4,6 +4,37 @@
  */
 
 document.addEventListener('DOMContentLoaded', () => {
+
+  const API_BASE = new URLSearchParams(window.location.search).get('api') || '/api';
+  const ROUTE_MSG = {
+    fuera_de_cobertura: 'Por ahora solo cubrimos Lima Metropolitana.',
+    sin_via_peatonal_cerca: 'No hay una vía peatonal cerca de ese punto.',
+    sin_ruta: 'No encontramos una ruta a pie entre esos puntos.',
+    iniciando: 'El servicio está iniciando, intenta en un momento.'
+  };
+
+  function showRouteError(msg) {
+    const el = document.getElementById('routeError');
+    if (!el) return;
+    el.innerText = msg;
+    el.classList.remove('hidden');
+    setTimeout(() => el.classList.add('hidden'), 5000);
+  }
+
+  function fmtMin(seconds) {
+    return `${Math.max(1, Math.round(seconds / 60))} min`;
+  }
+
+  function fmtDist(m) {
+    return m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m)} m`;
+  }
+
+  function sliceSegments(coords, segments) {
+    const out = [];
+    (segments || []).forEach(([i, j]) => out.push(coords.slice(i, j + 2)));
+    return out;
+  }
+
   // =========================================================================
   // 1. Datos Mockeados para Casos de Prueba (Lima Peatonal)
   // =========================================================================
@@ -12,110 +43,15 @@ document.addEventListener('DOMContentLoaded', () => {
       name: 'Elena',
       originName: 'Mi ubicación (Av. Javier Prado con Arequipa)',
       destName: 'Jr. Lloque Yupanqui 1120',
-      time: '20:30',
-      timeLabel: '20:30 (Noche)',
       originCoords: [-12.08807, -77.03387],
-      destCoords: [-12.07379, -77.04650],
-      tranquila: {
-        duration: '38 min',
-        dist: '2.9 km',
-        delta: '+3 min',
-        benefit: '· Prefiere alameda de Av. Arequipa y Av. Cuba iluminada',
-        sparse: '1 tramo con datos insuficientes en Alejandro Tirado',
-        coords: [
-          [-12.08807, -77.03387],
-          [-12.08727, -77.03400],
-          [-12.08645, -77.03411],
-          [-12.08568, -77.03422],
-          [-12.08508, -77.03431],
-          [-12.08415, -77.03444],
-          [-12.08357, -77.03453],
-          [-12.08298, -77.03461],
-          [-12.08244, -77.03469],
-          [-12.08136, -77.03485],
-          [-12.08087, -77.03492],
-          [-12.07985, -77.03507],
-          [-12.07838, -77.03530],
-          [-12.07750, -77.03543],
-          [-12.07650, -77.03558],
-          [-12.07551, -77.03574],
-          [-12.07450, -77.03590],
-          [-12.07455, -77.03630],
-          [-12.07465, -77.03710],
-          [-12.07480, -77.03830],
-          [-12.07490, -77.03926],
-          [-12.07495, -77.03984],
-          [-12.07499, -77.04079],
-          [-12.07505, -77.04169],
-          [-12.07510, -77.04264],
-          [-12.07507, -77.04424],
-          [-12.07507, -77.04514],
-          [-12.07505, -77.04638],
-          [-12.07505, -77.04689],
-          [-12.07490, -77.04689],
-          [-12.07379, -77.04689],
-          [-12.07379, -77.04650]
-        ],
-        sparseCoords: [
-          [-12.07450, -77.03590],
-          [-12.07455, -77.03630],
-          [-12.07465, -77.03710],
-          [-12.07480, -77.03830]
-        ]
-      },
-      rapida: {
-        duration: '35 min',
-        dist: '2.7 km',
-        delta: 'Directa',
-        risk: '· Corta por zona de bares de Risso y calles interiores',
-        coords: [
-          [-12.08807, -77.03387],
-          [-12.08645, -77.03411],
-          [-12.08415, -77.03444],
-          [-12.08244, -77.03469],
-          [-12.08240, -77.03580],
-          [-12.08235, -77.03690],
-          [-12.08225, -77.03830],
-          [-12.08210, -77.03980],
-          [-12.08195, -77.04120],
-          [-12.08180, -77.04250],
-          [-12.07980, -77.04255],
-          [-12.07750, -77.04260],
-          [-12.07510, -77.04264],
-          [-12.07507, -77.04424],
-          [-12.07507, -77.04514],
-          [-12.07505, -77.04638],
-          [-12.07505, -77.04689],
-          [-12.07490, -77.04689],
-          [-12.07379, -77.04689],
-          [-12.07379, -77.04650]
-        ]
-      }
+      destCoords: [-12.07379, -77.04650]
     },
     mateo: {
       name: 'Mateo',
       originName: 'Campus PUCP (Puerta Principal)',
       destName: 'Estación La Marina / Universitaria',
-      time: '22:15',
-      timeLabel: '22:15 (Madrugada)',
       originCoords: [-12.0695, -77.0795],
-      destCoords: [-12.0768, -77.077],
-      tranquila: {
-        duration: '15 min',
-        dist: '1.1 km',
-        delta: '+3 min',
-        benefit: '· Sigue por vereda iluminada de Av. Universitaria con serenazgo',
-        sparse: 'Cobertura normal en el tramo',
-        coords: [[-12.06915,-77.07822],[-12.06915,-77.07819],[-12.06916,-77.07815],[-12.06917,-77.07812],[-12.06919,-77.0781],[-12.06922,-77.07807],[-12.06928,-77.07802],[-12.06939,-77.07794],[-12.06951,-77.07796],[-12.06987,-77.078],[-12.07016,-77.07804],[-12.07042,-77.07809],[-12.07047,-77.0781],[-12.07109,-77.07824],[-12.07157,-77.07835],[-12.07185,-77.0784],[-12.07193,-77.07842],[-12.07201,-77.07843],[-12.07212,-77.07844],[-12.0724,-77.07844],[-12.07245,-77.07844],[-12.07268,-77.07847],[-12.07277,-77.07847],[-12.07282,-77.07848],[-12.07326,-77.0786],[-12.07357,-77.07874],[-12.07389,-77.07894],[-12.07408,-77.07909],[-12.07415,-77.07916],[-12.07466,-77.07963],[-12.07479,-77.07975],[-12.07482,-77.07978],[-12.07492,-77.07985],[-12.07494,-77.07987],[-12.075,-77.07992],[-12.07515,-77.08003],[-12.07557,-77.08034],[-12.07575,-77.0801],[-12.07585,-77.0796],[-12.076,-77.079],[-12.0762,-77.0784],[-12.07645,-77.0778],[-12.07665,-77.0774],[-12.07676,-77.07714]],
-        sparseCoords: []
-      },
-      rapida: {
-        duration: '12 min',
-        dist: '900 m',
-        delta: 'Directa',
-        risk: '· Corta por calles internas y oscuras de Pando de madrugada',
-        coords: [[-12.06915, -77.07822], [-12.06915, -77.07819], [-12.06916, -77.07815], [-12.06917, -77.07812], [-12.06919, -77.0781], [-12.06922, -77.07807], [-12.06928, -77.07802], [-12.06939, -77.07794], [-12.06951, -77.07796], [-12.06987, -77.078], [-12.07016, -77.07804], [-12.07025, -77.07804], [-12.07028, -77.07804], [-12.0703, -77.07804], [-12.07033, -77.07803], [-12.07034, -77.07803], [-12.07036, -77.07802], [-12.07037, -77.07801], [-12.07038, -77.078], [-12.07039, -77.07799], [-12.0704, -77.07798], [-12.0704, -77.07796], [-12.07041, -77.07794], [-12.07042, -77.07793], [-12.07044, -77.07785], [-12.07047, -77.07776], [-12.07056, -77.07738], [-12.07061, -77.07715], [-12.07076, -77.07646], [-12.07089, -77.07584], [-12.0709, -77.07578], [-12.07091, -77.07575], [-12.07092, -77.07572], [-12.07095, -77.07573], [-12.07099, -77.07573], [-12.07134, -77.07578], [-12.07154, -77.0758], [-12.07165, -77.07582], [-12.07172, -77.07582], [-12.07181, -77.07584], [-12.07208, -77.07587], [-12.07248, -77.07593], [-12.07327, -77.07605], [-12.07372, -77.07611], [-12.07397, -77.07614], [-12.0745, -77.07621], [-12.07516, -77.07629], [-12.07536, -77.07632], [-12.07548, -77.07634], [-12.07553, -77.07634], [-12.07563, -77.07635], [-12.07569, -77.07635], [-12.07576, -77.07636], [-12.07614, -77.07645], [-12.07605, -77.07693], [-12.07612, -77.07695], [-12.07676, -77.07714]]
-      }
+      destCoords: [-12.0768, -77.077]
     }
   };
 
@@ -170,30 +106,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (destMarker) map.removeLayer(destMarker);
     if (liveGpsMarker) map.removeLayer(liveGpsMarker);
 
-    // Ruta Rápida (delgada, color ámbar/atenuado)
-    layerRapida = L.polyline(data.rapida.coords, {
-      color: '#f59e0b',
-      weight: 3.5,
-      opacity: 0.6,
-      dashArray: '5, 8'
-    }).addTo(map);
-
+    // Ruta Rápida (delgada, color ámbar/atenuado); la geometría llega de /api/route
+    layerRapida = L.polyline([], { color: '#f59e0b', weight: 3.5, opacity: 0.6, dashArray: '5, 8' }).addTo(map);
     // Ruta Tranquila (trazo sólido de alto contraste)
-    layerTranquila = L.polyline(data.tranquila.coords, {
-      color: '#22c55e',
-      weight: 5.5,
-      opacity: 0.95
-    }).addTo(map);
-
-    // Segmento con datos insuficientes (gris punteado sobre la tranquila)
-    if (data.tranquila.sparseCoords && data.tranquila.sparseCoords.length > 0) {
-      layerSparse = L.polyline(data.tranquila.sparseCoords, {
-        color: '#94a3b8',
-        weight: 6,
-        dashArray: '4, 10',
-        opacity: 0.9
-      }).addTo(map);
-    }
+    layerTranquila = L.polyline([], { color: '#22c55e', weight: 5.5, opacity: 0.95 }).addTo(map);
+    layerSparse = null;
 
     // Marcadores de origen y destino personalizados
     const iconOrigin = L.divIcon({
@@ -222,7 +139,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     liveGpsMarker = L.marker(data.originCoords, { icon: iconLiveGps });
 
-    map.fitBounds(layerTranquila.getBounds(), { padding: [50, 50], maxZoom: 16 });
+    map.setView(data.originCoords, 15);
+    calculateDynamicRoute(data.originCoords, data.destCoords, data.destName);
   }
 
   // =========================================================================
@@ -373,34 +291,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (clearOrig) clearOrig.classList.add('hidden');
     const dropdown = document.getElementById('autocompleteDropdown');
     if (dropdown) dropdown.classList.add('hidden');
-    document.getElementById('badgeCurrentTime').innerText = data.time + ' h';
-    document.getElementById('timeLabel').innerText = data.timeLabel;
-
-    // Actualizar tarjeta Tranquila
-    const cardT = document.getElementById('cardTranquila');
-    if (cardT) {
-      cardT.querySelector('.route-duration').innerText = data.tranquila.duration;
-      cardT.querySelector('.delta-time').innerText = data.tranquila.delta;
-      cardT.querySelector('.delta-desc').innerText = data.tranquila.benefit;
-      const sparseEl = cardT.querySelector('.sparse-desc');
-      if (sparseEl) sparseEl.innerText = data.tranquila.sparse;
-    }
-
-    // Actualizar tarjeta Rápida
-    const cardR = document.getElementById('cardRapida');
-    if (cardR) {
-      cardR.querySelector('.route-duration').innerText = data.rapida.duration;
-      cardR.querySelector('.delta-time').innerText = data.rapida.delta;
-      cardR.querySelector('.delta-desc').innerText = data.rapida.risk;
-    }
-
     // Actualizar modo En Marcha & Glanceable Turn Card
     const walkingDest = document.querySelector('.walking-dest-name');
     if (walkingDest) walkingDest.innerText = data.destName;
-    const etaMins = document.querySelector('.eta-mins');
-    if (etaMins) etaMins.innerText = data.tranquila.duration;
-    const etaDist = document.querySelector('.eta-dist');
-    if (etaDist) etaDist.innerText = data.tranquila.dist;
 
     const turnDist = document.querySelector('.turn-dist');
     const turnInst = document.querySelector('.turn-instruction');
@@ -409,19 +302,17 @@ document.addEventListener('DOMContentLoaded', () => {
       if (state.preset === 'elena') {
         turnDist.innerText = 'EN 140 METROS';
         turnInst.innerText = 'Continúa por Av. Arequipa';
-        turnLandmark.innerText = '👁 Hito: Vereda ancha y paradero con luz activa';
+        turnLandmark.innerText = '👁 Hito: Vereda ancha y paradero cercano';
       } else {
         turnDist.innerText = 'EN 90 METROS';
         turnInst.innerText = 'Sigue por Av. Universitaria';
-        turnLandmark.innerText = '👁 Hito: Garita de serenazgo y alumbrado público';
+        turnLandmark.innerText = '👁 Hito: Avenida con comercio abierto';
       }
     }
 
     // Actualizar vista Compartir / Acompañante
     const pomTitle = document.querySelector('.pom-title');
     if (pomTitle) pomTitle.innerText = `${data.name} va caminando por ruta tranquila`;
-    const pomTime = document.querySelector('.pom-time');
-    if (pomTime) pomTime.innerText = `Salida: ${data.time}`;
     const btnCall = document.querySelector('.btn-call span');
     if (btnCall) btnCall.innerText = `Llamar a ${data.name}`;
 
@@ -440,7 +331,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // =========================================================================
-  // 7.1. Geocodificación en Vivo y Autocompletado (Photon Komoot & OSRM Foot)
+  // 7.1. Geocodificación en Vivo y Autocompletado (Photon Komoot)
   // =========================================================================
   const inputOrigin = document.getElementById('inputOrigin');
   const inputDest = document.getElementById('inputDest');
@@ -604,76 +495,78 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   async function calculateDynamicRoute(originCoords, destCoords, destLabel) {
-    const url = `https://router.project-osrm.org/route/v1/foot/${originCoords[1]},${originCoords[0]};${destCoords[1]},${destCoords[0]}?overview=full&geometries=geojson`;
-
     try {
-      const resp = await fetch(url);
-      if (!resp.ok) throw new Error('OSRM error');
-      const data = await resp.json();
-
-      if (data.routes && data.routes.length > 0) {
-        const route = data.routes[0];
-        const coords = route.geometry.coordinates.map(c => [c[1], c[0]]);
-        const distMeters = route.distance;
-        const distKm = (distMeters / 1000).toFixed(1) + ' km';
-        // Velocidad promedio peatonal urbana: 4.5 km/h = 75 m/min
-        const durationMin = Math.max(1, Math.round(distMeters / 75));
-
-        if (layerTranquila) {
-          layerTranquila.setLatLngs(coords);
-          layerTranquila.setStyle({ color: '#22c55e', weight: 5.5, opacity: 0.95 });
-        }
-        if (layerSparse) {
-          map.removeLayer(layerSparse);
-          layerSparse = null;
-        }
-        if (layerRapida) {
-          layerRapida.setLatLngs(coords);
-          layerRapida.setStyle({ color: '#f59e0b', weight: 3.5, opacity: 0.6, dashArray: '5, 8' });
-        }
-
-        // Actualizar tarjetas de pantalla 2 (Comparar)
-        const cardT = document.getElementById('cardTranquila');
-        if (cardT) {
-          cardT.querySelector('.route-duration').innerText = `${durationMin} min`;
-          cardT.querySelector('.delta-time').innerText = '+2 min';
-          cardT.querySelector('.delta-desc').innerText = '· Prioriza veredas iluminadas y avenidas con serenazgo';
-          const sparseEl = cardT.querySelector('.sparse-desc');
-          if (sparseEl) sparseEl.innerText = 'Ruta peatonal en vivo';
-        }
-
-        const cardR = document.getElementById('cardRapida');
-        if (cardR) {
-          const rapidaMin = Math.max(1, durationMin - 2);
-          cardR.querySelector('.route-duration').innerText = `${rapidaMin} min`;
-          cardR.querySelector('.delta-time').innerText = 'Directa';
-          cardR.querySelector('.delta-desc').innerText = '· Ruta directa por vía vehicular';
-        }
-
-        // Actualizar pantalla 4 (En Marcha)
-        const walkingDest = document.querySelector('.walking-dest-name');
-        if (walkingDest) walkingDest.innerText = destLabel;
-        const etaMins = document.querySelector('.eta-mins');
-        if (etaMins) etaMins.innerText = `${durationMin} min`;
-        const etaDist = document.querySelector('.eta-dist');
-        if (etaDist) etaDist.innerText = distKm;
-        const turnInst = document.querySelector('.turn-instruction');
-        if (turnInst) turnInst.innerText = `Rumbo a ${destLabel.split('(')[0].trim()}`;
-
-        // Pantalla 5 (Compartir)
-        const pomTitle = document.querySelector('.pom-title');
-        if (pomTitle) pomTitle.innerText = `Caminando hacia ${destLabel.split('(')[0].trim()}`;
-
-        if (layerTranquila) {
-          map.fitBounds(layerTranquila.getBounds(), { padding: [50, 50], maxZoom: 16 });
-        }
+      const resp = await fetch(`${API_BASE}/route`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          origin: { lat: originCoords[0], lon: originCoords[1] },
+          destination: { lat: destCoords[0], lon: destCoords[1] }
+        })
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        showRouteError(ROUTE_MSG[data.error] || 'No pudimos calcular la ruta.');
+        return;
       }
+      renderRoutes(data, destLabel);
     } catch (err) {
-      console.warn('[Wachi Router] Error calculando ruta con OSRM:', err);
-      const directCoords = [originCoords, destCoords];
-      if (layerTranquila) layerTranquila.setLatLngs(directCoords);
-      map.fitBounds(L.latLngBounds([originCoords, destCoords]), { padding: [50, 50] });
+      console.warn('[Wachi] Error pidiendo la ruta:', err);
+      showRouteError(ROUTE_MSG.iniciando);
     }
+  }
+
+  function renderRoutes(data, destLabel) {
+    const fast = data.fast;
+    const calm = data.calm;
+    const shown = calm || fast;             // lo que se traza como "Tranquila" si no hay calm es la rápida
+
+    if (layerRapida) layerRapida.setLatLngs(fast.geometry);
+    if (layerTranquila) layerTranquila.setLatLngs(shown.geometry);
+    if (layerSparse) { map.removeLayer(layerSparse); layerSparse = null; }
+    const sparse = sliceSegments(shown.geometry, shown.low_data_segments);
+    if (sparse.length) {
+      layerSparse = L.polyline(sparse, { color: '#94a3b8', weight: 6, dashArray: '4, 10', opacity: 0.9 }).addTo(map);
+    }
+
+    const cardT = document.getElementById('cardTranquila');
+    const cardR = document.getElementById('cardRapida');
+    if (calm) {
+      cardT.classList.remove('hidden');
+      cardT.querySelector('.route-duration').innerText = fmtMin(calm.duration_s);
+      cardT.querySelector('.delta-time').innerText = `+${Math.max(1, Math.round(calm.detour_s / 60))} min`;
+      const blocks = calm.blocks_fewer_near_robberies;
+      cardT.querySelector('.delta-desc').innerText = blocks > 0
+        ? `· pasa ${blocks} cuadra${blocks === 1 ? '' : 's'} menos junto a robos registrados`
+        : `· ${calm.exposure_reduction_pct} % menos robos registrados cerca`;
+      const n = calm.low_data_segments.length;
+      cardT.querySelector('.sparse-desc').innerText = n
+        ? `${n} tramo${n === 1 ? '' : 's'} con pocos datos` : 'Cobertura normal en el tramo';
+    } else {
+      cardT.classList.add('hidden');
+      if (state.selectedRoute === 'safe') cardR.click();
+    }
+    cardR.querySelector('.route-duration').innerText = fmtMin(fast.duration_s);
+    cardR.querySelector('.delta-time').innerText = 'Directa';
+    cardR.querySelector('.delta-desc').innerText = calm
+      ? '· La más corta; pasa junto a más robos registrados'
+      : '· La más corta; no hay un desvío que valga la pena';
+
+    const chosen = state.selectedRoute === 'fast' || !calm ? fast : calm;
+    const walkingDest = document.querySelector('.walking-dest-name');
+    if (walkingDest) walkingDest.innerText = destLabel;
+    const etaMins = document.querySelector('.eta-mins');
+    if (etaMins) etaMins.innerText = fmtMin(chosen.duration_s);
+    const etaDist = document.querySelector('.eta-dist');
+    if (etaDist) etaDist.innerText = fmtDist(chosen.distance_m);
+    const turnInst = document.querySelector('.turn-instruction');
+    if (turnInst) turnInst.innerText = `Rumbo a ${destLabel.split('(')[0].trim()}`;
+    const pomTitle = document.querySelector('.pom-title');
+    if (pomTitle) pomTitle.innerText = `Caminando hacia ${destLabel.split('(')[0].trim()}`;
+    const asOf = document.getElementById('dataAsOf');
+    if (asOf) asOf.innerText = `Robos y hurtos registrados hasta ${data.data_as_of}`;
+
+    map.fitBounds(layerTranquila.getBounds(), { padding: [50, 50], maxZoom: 16 });
   }
 
   async function reverseGeocode(lat, lon) {

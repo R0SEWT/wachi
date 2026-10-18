@@ -1439,3 +1439,6 @@ html, body {
 .hidden {
   display: none !important;
 }
+
+.route-error{color:#f59e0b;font-size:.9rem;margin:.5rem 0}
+.data-asof{color:#94a3b8;font-size:.75rem;margin:.25rem 0 0}
