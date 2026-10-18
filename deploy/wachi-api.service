@@ -1,0 +1,14 @@
+[Unit]
+Description=Wachi API
+After=network-online.target
+
+[Service]
+WorkingDirectory=%h/wachi/api
+ExecStart=%h/.local/bin/uv run uvicorn wachi.api:app --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=5
+Nice=10
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target
