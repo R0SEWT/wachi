@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Wachi — Camina tranquilo en Lima</title>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+  <!-- Google Fonts: Plus Jakarta Sans & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="style.css">
+
+  <!-- PWA & Mobile Web App Meta -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0e1117">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="icon-192.svg">
+  <link rel="icon" type="image/svg+xml" href="icon-192.svg">
+</head>
+<body class="mode-dark">
+  <div id="app" class="app-container">
+    
+    <!-- Top HUD Bar -->
+    <header class="hud-top">
+      <div class="hud-brand">
+        <span class="brand-badge">WACHI</span>
+        <span class="brand-sub">Lima Peatonal</span>
+      </div>
+
+      <div class="hud-actions">
+        <!-- Selector horario -->
+        <button id="btnTimeSelect" class="chip-hud" aria-label="Cambiar horario">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <span id="timeLabel">20:30 (Noche)</span>
+        </button>
+
+        <!-- Modo Pantalla Discreta -->
+        <button id="btnThemeToggle" class="chip-hud icon-only" aria-label="Cambiar modo de pantalla" title="Modo Pantalla Discreta">
+          <svg id="iconMoon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          <svg id="iconSun" class="hidden" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+        </button>
+
+        <!-- Info / Transparencia -->
+        <button id="btnInfo" class="chip-hud icon-only" aria-label="Información de datos">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Alerta de desvío flotante (>50 m) -->
+    <div id="deviationAlert" class="deviation-banner hidden">
+      <div class="deviation-content">
+        <div class="deviation-icon">⚠️</div>
+        <div class="deviation-text">
+          <strong>Te desviaste de la ruta tranquila</strong>
+          <span>A 65 m del camino sugerido</span>
+        </div>
+      </div>
+      <div class="deviation-actions">
+        <button id="btnRecalculate" class="btn-alert-action">Recalcular</button>
+        <button id="btnMuteAlert" class="btn-alert-dismiss">Silenciar 10m</button>
+      </div>
+    </div>
+
+    <!-- Map Canvas -->
+    <main id="map" class="map-viewport"></main>
+
+    <!-- Botones flotantes del mapa -->
+    <div class="map-floating-controls">
+      <button id="btnRecenterGPS" class="fab-map" aria-label="Centrar en mi ubicación">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="22" y1="12" x2="18" y2="12"/><line x1="6" y1="12" x2="2" y2="12"/><line x1="12" y1="6" x2="12" y2="2"/><line x1="12" y1="22" x2="12" y2="18"/></svg>
+      </button>
+      <button id="btnSimulateDeviation" class="fab-map" title="Simular desvío >50m para testing">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8L22 12L18 16"/><path d="M2 12H22"/></svg>
+      </button>
+    </div>
+
+    <!-- Indicador de red offline -->
+    <div id="offlineIndicator" class="offline-pill hidden">
+      <span>● Modo sin conexión (Ruta guardada)</span>
+    </div>
+
+    <!-- Toast / Banner de Fijar en el mapa -->
+    <div id="mapPickingToast" class="map-picking-toast hidden">
+      <div class="toast-content">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        <span>Toca cualquier punto del mapa para fijar destino</span>
+      </div>
+      <button id="btnCancelMapPick" class="btn-toast-cancel">Cancelar</button>
+    </div>
+
+    <!-- Bottom Sheet Principal (Móvil) -->
+    <section id="bottomSheet" class="bottom-sheet state-search">
+      <div class="sheet-handle-zone" id="sheetHandle">
+        <div class="sheet-handle-bar"></div>
+      </div>
+
+      <div class="sheet-content">
+        
+        <!-- PANTALLA 1: Inicio y Búsqueda -->
+        <div id="screenSearch" class="screen-view active">
+          <div class="input-card" id="searchInputsCard">
+            <div class="input-row">
+              <span class="point-bullet origin-bullet">●</span>
+              <input type="text" id="inputOrigin" class="route-input" value="Mi ubicación actual (Lince)" placeholder="Punto de partida" autocomplete="off" spellcheck="false">
+              <button id="btnClearOrigin" class="btn-clear-input hidden" title="Limpiar">&times;</button>
+            </div>
+            <div class="input-divider"></div>
+            <div class="input-row">
+              <span class="point-bullet dest-bullet">▲</span>
+              <input type="text" id="inputDest" class="route-input" placeholder="¿A dónde vas en Lima?" value="Jr. Lloque Yupanqui 1120" autocomplete="off" spellcheck="false">
+              <button id="btnClearDest" class="btn-clear-input" title="Limpiar">&times;</button>
+            </div>
+          </div>
+
+          <!-- Dropdown de autocompletado en Lima Metropolitana -->
+          <div id="autocompleteDropdown" class="autocomplete-dropdown hidden">
+            <div class="dropdown-header">
+              <span class="dropdown-title">Sugerencias en Lima</span>
+              <span id="autocompleteSpinner" class="spinner-inline hidden"></span>
+            </div>
+            <ul id="suggestionsList" class="suggestions-list" role="listbox"></ul>
+            <div id="dropdownEmpty" class="dropdown-empty hidden">
+              <span>Sin resultados en Lima. Prueba con una avenida, parque o hito.</span>
+            </div>
+          </div>
+
+          <!-- Acciones auxiliares de geocodificación -->
+          <div class="search-aux-actions">
+            <button id="btnPickOnMap" class="btn-aux-pick" title="Fijar destino tocando en el mapa">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+              <span>Tocar en el mapa</span>
+            </button>
+            <button id="btnCurrentGps" class="btn-aux-pick" title="Usar mi ubicación GPS actual">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="22" y1="12" x2="18" y2="12"/><line x1="6" y1="12" x2="2" y2="12"/><line x1="12" y1="6" x2="12" y2="2"/><line x1="12" y1="22" x2="12" y2="18"/></svg>
+              <span>Mi GPS</span>
+            </button>
+          </div>
+
+          <!-- Destinos rápidos (Casos de prueba Elena / Mateo) -->
+          <div class="quick-chips">
+            <span class="chips-label">Prueba rápida:</span>
+            <button class="chip-preset active" data-preset="elena">Elena (Entrevista Lince)</button>
+            <button class="chip-preset" data-preset="mateo">Mateo (PUCP nocturno)</button>
+          </div>
+
+          <div class="fallback-gps-box hidden" id="gpsFallbackBox">
+            <span>Ubicación GPS no disponible. Puedes</span>
+            <button id="btnPickOnMapFallback" class="link-btn">tocar en el mapa</button>
+          </div>
+
+          <button id="btnCalculateRoute" class="btn-primary-action">
+            <span>Comparar rutas</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          </button>
+        </div>
+
+        <!-- PANTALLA 2: Comparación de Rutas -->
+        <div id="screenCompare" class="screen-view">
+          <div class="screen-header">
+            <h2 class="section-title">Elige cómo caminar</h2>
+            <span class="badge-time-selected" id="badgeCurrentTime">20:30 h</span>
+          </div>
+
+          <div class="route-cards-container">
+            <!-- Tarjeta Ruta Tranquila -->
+            <div class="route-card card-tranquila selected" id="cardTranquila">
+              <div class="card-radio">●</div>
+              <div class="card-body">
+                <div class="card-header-row">
+                  <span class="route-name">Tranquila</span>
+                  <span class="route-duration">22 min</span>
+                </div>
+                <div class="card-metric-primary">
+                  <span class="delta-time">+3 min</span>
+                  <span class="delta-desc">· Evita 2 esquinas con robo de celular</span>
+                </div>
+                <div class="card-metric-secondary">
+                  <span class="icon-sparse">◌</span>
+                  <span class="sparse-desc">1 tramo con datos insuficientes</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Tarjeta Ruta Rápida -->
+            <div class="route-card card-rapida" id="cardRapida">
+              <div class="card-radio">○</div>
+              <div class="card-body">
+                <div class="card-header-row">
+                  <span class="route-name">Rápida</span>
+                  <span class="route-duration">19 min</span>
+                </div>
+                <div class="card-metric-primary alert-exposure">
+                  <span class="delta-time">Directa</span>
+                  <span class="delta-desc">· Cruza tramo con alta incidencia nocturna</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="compare-actions-row">
+            <button id="btnStartWalk" class="btn-primary-action">
+              <span>Iniciar marcha</span>
+            </button>
+            <button id="btnViewDetail" class="btn-secondary-action">
+              <span>Ver por qué</span>
+            </button>
+            <button id="btnShareFromCompare" class="btn-secondary-action icon-only" title="Compartir">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- PANTALLA 3: Detalle de Ruta (Hoja de Tramos) -->
+        <div id="screenDetail" class="screen-view">
+          <div class="screen-header">
+            <button id="btnBackToCompare" class="btn-back">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+              <span>Volver</span>
+            </button>
+            <h2 class="section-title">Por qué este camino</h2>
+          </div>
+
+          <div class="detail-route-summary">
+            <div class="summary-pill safe-pill">Ruta Tranquila · 38 min · 2.9 km</div>
+          </div>
+
+          <ul class="segments-list">
+            <li class="segment-item safe">
+              <div class="segment-dot"></div>
+              <div class="segment-info">
+                <strong>Av. Arequipa (cdras. 26 a 14)</strong>
+                <p>Alameda central con ciclovía, veredas anchas y módulos de serenazgo activos.</p>
+              </div>
+            </li>
+            <li class="segment-item avoided">
+              <div class="segment-dot avoided-dot">✕</div>
+              <div class="segment-info">
+                <strong class="avoided-title">Desvío: Se evita cruzar el corazón de Risso y calles interiores</strong>
+                <p>Historial recurrente de arrebatos de celular en la franja 19:00 - 23:00.</p>
+              </div>
+            </li>
+            <li class="segment-item sparse">
+              <div class="segment-dot sparse-dot">◌</div>
+              <div class="segment-info">
+                <strong class="sparse-title">Av. Alejandro Tirado (tramo con datos insuficientes)</strong>
+                <p>Transición residencial entre Lince y Jesús María. Camina atento por la acera iluminada.</p>
+              </div>
+            </li>
+            <li class="segment-item safe">
+              <div class="segment-dot"></div>
+              <div class="segment-info">
+                <strong>Av. Cuba (cdras. 13 a 11)</strong>
+                <p>Eje comercial principal de Jesús María con iluminación LED y comercio activo.</p>
+              </div>
+            </li>
+          </ul>
+
+          <div class="detail-actions">
+            <button id="btnStartFromDetail" class="btn-primary-action">Iniciar marcha tranquila</button>
+          </div>
+        </div>
+
+        <!-- PANTALLA 4: Modo En Marcha (Navegación Discreta & Glanceable) -->
+        <div id="screenWalking" class="screen-view">
+          <!-- Glanceable Turn Card (Lectura en < 1 segundo según Oulasvirta et al.) -->
+          <div class="glanceable-turn-card">
+            <div class="turn-direction-badge">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+            </div>
+            <div class="turn-text">
+              <div class="turn-header-row">
+                <span class="turn-dist">EN 140 METROS</span>
+                <span class="turn-time-chip">~2 min</span>
+              </div>
+              <strong class="turn-instruction">Continúa por Av. Arequipa</strong>
+              <span class="turn-landmark">👁 Hito: Vereda ancha y paradero con luz activa</span>
+            </div>
+          </div>
+
+          <div class="walking-header">
+            <div class="walking-target">
+              <span class="walking-label">Destino</span>
+              <strong class="walking-dest-name">Jr. Lloque Yupanqui 1120</strong>
+            </div>
+            <div class="walking-eta">
+              <span class="eta-mins">21 min</span>
+              <span class="eta-dist">1.3 km</span>
+            </div>
+          </div>
+
+          <!-- Banner de estado con micro-heurística -->
+          <div class="walking-safety-banner">
+            <span class="dot-live">●</span>
+            <span>Ruta tranquila: Evita zonas solitarias</span>
+          </div>
+
+          <!-- Controles de marcha con Modo Bolsillo (PocketNavigator Pielot et al.) -->
+          <div class="walking-controls-row">
+            <button id="btnPocketMode" class="btn-pocket-mode" title="Apaga la pantalla para no llamar la atención y avisa por vibración">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+              <span>Modo Bolsillo (Háptico)</span>
+            </button>
+            <button id="btnShareLive" class="btn-secondary-action">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+              <span>Compartir</span>
+            </button>
+            <button id="btnEndWalk" class="btn-danger-action">Terminar</button>
+          </div>
+
+          <div class="walking-external-fallback">
+            <button id="btnOpenGoogleMaps" class="btn-link-action">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              <span>Abrir en Google Maps (puede desviar la ruta)</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- PANTALLA 5: Compartir / Vista Acompañante -->
+        <div id="screenShare" class="screen-view">
+          <div class="screen-header">
+            <button id="btnBackFromShare" class="btn-back">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+              <span>Volver</span>
+            </button>
+            <h2 class="section-title">Compartir trayecto</h2>
+          </div>
+
+          <!-- Tarjeta de tranquilidad pensada para Carmen (Madre/Acompañante) -->
+          <div class="peace-of-mind-card">
+            <div class="pom-header">
+              <span class="pom-badge">VISTA ACOMPAÑANTE</span>
+              <span class="pom-time">Salida: 20:30</span>
+            </div>
+            <h3 class="pom-title">Elena va caminando por ruta tranquila</h3>
+            <div class="pom-meta">
+              <div class="pom-row">
+                <span class="pom-label">Destino:</span>
+                <span class="pom-val">Jr. Lloque Yupanqui 1120</span>
+              </div>
+              <div class="pom-row">
+                <span class="pom-label">Llegada estimada:</span>
+                <span class="pom-val highlight">20:52 (en 22 min)</span>
+              </div>
+            </div>
+            
+            <div class="pom-contact-actions">
+              <a href="tel:+51999999999" class="btn-contact btn-call">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                <span>Llamar a Elena</span>
+              </a>
+              <button id="btnShareWhatsApp" class="btn-contact btn-whatsapp">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+                <span>Enviar por WhatsApp</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="share-link-box">
+            <label class="share-link-label">Enlace reproducible (Deep link):</label>
+            <div class="copy-field">
+              <input type="text" id="shareUrlInput" readonly value="https://wachi.pe/?origin=lince&dest=lloque&time=20:30&route=safe">
+              <button id="btnCopyLink" class="btn-copy">Copiar</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- Modal de Onboarding y Transparencia (10 segundos) -->
+    <div id="modalOnboarding" class="modal-backdrop hidden">
+      <div class="modal-card">
+        <h3 class="modal-title">Cómo funciona Wachi</h3>
+        <ul class="onboarding-points">
+          <li>
+            <span class="point-icon text-success">✓</span>
+            <div>
+              <strong>Datos oficiales:</strong>
+              <p>Compara rutas evaluando denuncias históricas de la PNP y franjas horarias.</p>
+            </div>
+          </li>
+          <li>
+            <span class="point-icon text-warning">!</span>
+            <div>
+              <strong>Honestidad radical:</strong>
+              <p>Menos denuncias no siempre significa tranquilidad; algunas calles tienen pocos reportes.</p>
+            </div>
+          </li>
+          <li>
+            <span class="point-icon text-info">👁</span>
+            <div>
+              <strong>Tu criterio primero:</strong>
+              <p>Wachi es una guía orientativa. Mantén siempre atención a tu entorno y confía en tu intuición.</p>
+            </div>
+          </li>
+        </ul>
+        <button id="btnAcceptOnboarding" class="btn-primary-action">Entendido, empezar</button>
+      </div>
+    </div>
+
+    <!-- Modal selector de horario -->
+    <div id="modalTimePicker" class="modal-backdrop hidden">
+      <div class="modal-card">
+        <h3 class="modal-title">Seleccionar franja horaria</h3>
+        <p class="modal-desc">El riesgo de las calles cambia según la hora del día en Lima:</p>
+        <div class="time-buckets-list">
+          <button class="time-bucket-btn" data-hour="08:00">Mañana (06:00 - 10:00)</button>
+          <button class="time-bucket-btn" data-hour="12:00">Mediodía (10:00 - 14:00)</button>
+          <button class="time-bucket-btn" data-hour="16:00">Tarde (14:00 - 18:00)</button>
+          <button class="time-bucket-btn active" data-hour="20:30">Noche (18:00 - 22:00)</button>
+          <button class="time-bucket-btn" data-hour="23:30">Madrugada (22:00 - 06:00)</button>
+        </div>
+        <button id="btnCloseTimePicker" class="btn-secondary-action">Cerrar</button>
+      </div>
+    </div>
+
+    <!-- Overlay de Modo Bolsillo (Blackout anti-luz y bloqueo de toques accidentales) -->
+    <div id="pocketOverlay" class="pocket-overlay hidden">
+      <div class="pocket-pill">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+        <div class="pocket-pill-text">
+          <strong>Modo Bolsillo Activo</strong>
+          <span>Guiando por vibración · Toca dos veces para ver mapa</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
