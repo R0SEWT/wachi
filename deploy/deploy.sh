@@ -8,7 +8,8 @@ cd "$(dirname "$0")/.."
 if [[ "$WHAT" == api || "$WHAT" == all ]]; then
   "$SSH" "$HOST" 'set -e; cd ~/wachi && git pull --ff-only && cd api && ~/.local/bin/uv sync --frozen \
     && systemctl --user restart wachi-api && sleep 5 && systemctl --user is-active wachi-api'
-  "$SSH" "$HOST" 'for i in $(seq 1 30); do curl -sf localhost:8000/health && break; sleep 5; done; echo'
+  # Espera hasta 150 s a que /health responda 200; si no, el comando remoto (y el script) falla.
+  "$SSH" "$HOST" 'ok=0; for i in $(seq 1 30); do curl -sf localhost:8000/health && ok=1 && break; sleep 5; done; [ "$ok" = 1 ]'
 fi
 if [[ "$WHAT" == web || "$WHAT" == all ]]; then
   netlify deploy --prod --dir web --site "$SITE_ID" --message "$(git rev-parse --short HEAD)"
