@@ -1,48 +1,21 @@
 # wachi — AI Agent Instructions
 
-## Domain / Scientific Context
+## Qué es
+Rutas a pie Rápida/Tranquila para Lima. `api/` (FastAPI) + `web/` (PWA). Decisiones en `docs/adr/`.
 
-<!-- The real-world problem this project addresses. State the claim/objective, the outcome,
-     and — critically — the data provenance (own data? regional/Peruvian domain? public source?).
-     This is the differentiator; be concrete. -->
+## Arquitectura
+pbf OSM → `graph.py` (red peatonal, recintos) → `router.py` (Dijkstra, costo largo·(1+β·r̄))
+eventos.parquet → `surface.py` (S150 + cobertura H3) ┘
+`select.py` aplica ADR 015; `explain.py` arma el JSON (ADR 011); `api.py` lo sirve.
 
-- **Problem**: <!-- fill -->
-- **Outcome / target**: <!-- fill -->
-- **Data provenance**: <!-- fill: source, ownership, how acquired -->
+## Reglas
+- Nunca devolver coordenadas de denuncias; `api/data/` no se versiona.
+- Copy: sin "esquinas", "segura", "iluminada", "serenazgo". Categoría: "robos y hurtos".
+- Parámetros solo en `config.py` (env `WACHI_*`), nunca literales en el código.
+- Tests: `cd api && uv run pytest`; con datos reales `uv run pytest -m slow`.
 
-## Architecture
-
-<!-- How the project runs. If it's a pipeline, describe the stages and the data flow between them. -->
-
-```bash
-# e.g. uv run ingest && uv run features && uv run model
-```
-
-## Key Files
-
-| File | Purpose |
-|------|---------|
-| `src/wachi/...` | <!-- fill --> |
-| `configs/...` | <!-- fill --> |
-
-## Data Conventions
-
-<!-- Adjust/remove if this is not a data project. Defaults reflect the medallion + polars/duckdb stack. -->
-
-- **Layers**: raw → `data/bronze/`, cleaned → `data/silver/`, analytic → `data/gold/`. All gitignored.
-- **Where it lives**: <!-- fill: gitignored data still needs a home — say where each layer lives and how
-  to rebuild it: regenerable from source (the command) · remote silver (see below) · a private HF
-  Storage Bucket for working data · an HF dataset repo (card + license) for data you publish.
-  Never publish third-party or personal data. See https://github.com/R0SEWT/project-kit/blob/main/catalog/setup-options.md -->
-- **Polars over pandas** everywhere; only drop to numpy when a library requires it.
-- **DuckDB for SQL joins** across parquet; Polars for local transforms.
-- **Remote silver**: reference the remote root via `$SILVER` in SQL when pulling shared data.
-- Keep dates as typed `Date`, never strings, in intermediate tables.
-
-## Conventions
-
-<!-- Project-specific rules: ID normalization, seeds, temporal discipline, naming, etc. -->
-
+## Despliegue
+`deploy/deploy.sh` (ver `deploy/README` en el script). Backend en la 4060 vía Tailscale Funnel; PWA en Netlify.
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:6cd5cc61 -->
 ## Beads Issue Tracker

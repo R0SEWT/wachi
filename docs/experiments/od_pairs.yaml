@@ -1,0 +1,722 @@
+# Pares origen-destino del experimento wachi-06f.1 (comparación de ruteo).
+# Generado con: uv run scripts/experiments/comparacion_ruteo.py --gen-pairs
+# Semilla 20261007; nodos de la red peatonal OSM (Geofabrik peru-latest, sha256 7be6d84ad9eaca07…).
+# Coordenadas WGS84 ya ajustadas a un nodo de la componente conexa mayor de la red.
+# estrato: caso (UX y prototipo previo) | recinto | cobertura_alta | cobertura_baja.
+# dist_red_m: camino más corto en la red propia (β=0); banda según esa distancia.
+semilla: 20261007
+pares:
+- id: ux_elena
+  estrato: caso
+  distrito: ''
+  cobertura: ''
+  banda: 2.5-4
+  dist_red_m: 2724
+  recinto_od: false
+  origen:
+    lat: -12.088071
+    lon: -77.033871
+  destino:
+    lat: -12.073791
+    lon: -77.046886
+  nota: UX Elena; también caso previo 'elena'; ajuste a nodo 0 m / 42 m
+- id: ux_mateo
+  estrato: caso
+  distrito: ''
+  cobertura: ''
+  banda: 0.8-1.5
+  dist_red_m: 1250
+  recinto_od: true
+  origen:
+    lat: -12.069692
+    lon: -77.079569
+  destino:
+    lat: -12.076985
+    lon: -77.077202
+  nota: 'UX Mateo: PUCP (puerta principal) -> La Marina/Universitaria; ajuste a nodo 23 m / 30 m'
+- id: prev_sanmarcos
+  estrato: caso
+  distrito: ''
+  cobertura: ''
+  banda: 2.5-4
+  dist_red_m: 3071
+  recinto_od: true
+  origen:
+    lat: -12.056664
+    lon: -77.082955
+  destino:
+    lat: -12.077131
+    lon: -77.082677
+  nota: prototipo previo; ajuste a nodo 9 m / 4 m
+- id: prev_cercado
+  estrato: caso
+  distrito: ''
+  cobertura: ''
+  banda: 1.5-2.5
+  dist_red_m: 1657
+  recinto_od: false
+  origen:
+    lat: -12.046676
+    lon: -77.042454
+  destino:
+    lat: -12.058438
+    lon: -77.036713
+  nota: prototipo previo; ajuste a nodo 25 m / 18 m
+- id: prev_gamarra
+  estrato: caso
+  distrito: ''
+  cobertura: ''
+  banda: 2.5-4
+  dist_red_m: 2693
+  recinto_od: false
+  origen:
+    lat: -12.066688
+    lon: -77.014781
+  destino:
+    lat: -12.067402
+    lon: -77.034611
+  nota: prototipo previo; ajuste a nodo 37 m / 102 m
+- id: prev_miraflores
+  estrato: caso
+  distrito: ''
+  cobertura: ''
+  banda: 1.5-2.5
+  dist_red_m: 2007
+  recinto_od: false
+  origen:
+    lat: -12.122062
+    lon: -77.029712
+  destino:
+    lat: -12.135044
+    lon: -77.022527
+  nota: prototipo previo; ajuste a nodo 20 m / 40 m
+- id: prev_surquillo
+  estrato: caso
+  distrito: ''
+  cobertura: ''
+  banda: 2.5-4
+  dist_red_m: 2598
+  recinto_od: false
+  origen:
+    lat: -12.112562
+    lon: -77.000178
+  destino:
+    lat: -12.133686
+    lon: -76.99938
+  nota: prototipo previo; ajuste a nodo 26 m / 10 m
+- id: rec_rebagliati
+  estrato: recinto
+  distrito: ''
+  cobertura: ''
+  banda: 1.5-2.5
+  dist_red_m: 1626
+  recinto_od: true
+  origen:
+    lat: -12.077702
+    lon: -77.040438
+  destino:
+    lat: -12.085534
+    lon: -77.033182
+  nota: origen en Hospital Nacional Edgardo Rebagliati Martins (nodo dentro)
+- id: rec_almenara
+  estrato: recinto
+  distrito: ''
+  cobertura: ''
+  banda: 1.5-2.5
+  dist_red_m: 1534
+  recinto_od: true
+  origen:
+    lat: -12.059352
+    lon: -77.022015
+  destino:
+    lat: -12.066688
+    lon: -77.014781
+  nota: origen en Hospital Nacional Guillermo Almenara Irigoyen (nodo dentro)
+- id: rec_pucp
+  estrato: recinto
+  distrito: ''
+  cobertura: ''
+  banda: 0.8-1.5
+  dist_red_m: 1247
+  recinto_od: true
+  origen:
+    lat: -12.077112
+    lon: -77.082884
+  destino:
+    lat: -12.069037
+    lon: -77.079881
+  nota: destino en Pontificia Universidad Católica del Perú (nodo dentro)
+- id: rec_sanmarcos
+  estrato: recinto
+  distrito: ''
+  cobertura: ''
+  banda: 1.5-2.5
+  dist_red_m: 1798
+  recinto_od: true
+  origen:
+    lat: -12.059944
+    lon: -77.074131
+  destino:
+    lat: -12.056668
+    lon: -77.083939
+  nota: destino en Ciudad Universitaria de la Universidad Nacional Mayor de San Marcos (nodo dentro)
+- id: miraflores_1
+  estrato: cobertura_alta
+  distrito: Miraflores
+  cobertura: alta
+  banda: 0.8-1.5
+  dist_red_m: 1040
+  recinto_od: false
+  origen:
+    lat: -12.116785
+    lon: -77.026413
+  destino:
+    lat: -12.117981
+    lon: -77.018309
+  nota: aleatorio banda 0.8-1.5
+- id: miraflores_2
+  estrato: cobertura_alta
+  distrito: Miraflores
+  cobertura: alta
+  banda: 1.5-2.5
+  dist_red_m: 1536
+  recinto_od: false
+  origen:
+    lat: -12.123733
+    lon: -77.032339
+  destino:
+    lat: -12.130092
+    lon: -77.021602
+  nota: aleatorio banda 1.5-2.5
+- id: miraflores_3
+  estrato: cobertura_alta
+  distrito: Miraflores
+  cobertura: alta
+  banda: 2.5-4
+  dist_red_m: 3149
+  recinto_od: false
+  origen:
+    lat: -12.121423
+    lon: -77.026784
+  destino:
+    lat: -12.095091
+    lon: -77.029763
+  nota: aleatorio banda 2.5-4
+- id: miraflores_4
+  estrato: cobertura_alta
+  distrito: Miraflores
+  cobertura: alta
+  banda: 0.8-1.5
+  dist_red_m: 803
+  recinto_od: false
+  origen:
+    lat: -12.122416
+    lon: -77.02058
+  destino:
+    lat: -12.116344
+    lon: -77.020164
+  nota: aleatorio banda 0.8-1.5
+- id: sanisidro_1
+  estrato: cobertura_alta
+  distrito: San Isidro
+  cobertura: alta
+  banda: 0.8-1.5
+  dist_red_m: 1138
+  recinto_od: false
+  origen:
+    lat: -12.094756
+    lon: -77.032899
+  destino:
+    lat: -12.091204
+    lon: -77.024813
+  nota: aleatorio banda 0.8-1.5
+- id: sanisidro_2
+  estrato: cobertura_alta
+  distrito: San Isidro
+  cobertura: alta
+  banda: 1.5-2.5
+  dist_red_m: 2430
+  recinto_od: false
+  origen:
+    lat: -12.090715
+    lon: -77.036329
+  destino:
+    lat: -12.090618
+    lon: -77.053844
+  nota: aleatorio banda 1.5-2.5
+- id: sanisidro_3
+  estrato: cobertura_alta
+  distrito: San Isidro
+  cobertura: alta
+  banda: 2.5-4
+  dist_red_m: 3309
+  recinto_od: false
+  origen:
+    lat: -12.09253
+    lon: -77.03406
+  destino:
+    lat: -12.076252
+    lon: -77.052325
+  nota: aleatorio banda 2.5-4
+- id: sanisidro_4
+  estrato: cobertura_alta
+  distrito: San Isidro
+  cobertura: alta
+  banda: 1.5-2.5
+  dist_red_m: 1993
+  recinto_od: false
+  origen:
+    lat: -12.105025
+    lon: -77.041395
+  destino:
+    lat: -12.109188
+    lon: -77.053739
+  nota: aleatorio banda 1.5-2.5
+- id: lince_1
+  estrato: cobertura_alta
+  distrito: Lince
+  cobertura: alta
+  banda: 0.8-1.5
+  dist_red_m: 1059
+  recinto_od: false
+  origen:
+    lat: -12.078148
+    lon: -77.032268
+  destino:
+    lat: -12.081954
+    lon: -77.026774
+  nota: aleatorio banda 0.8-1.5
+- id: lince_2
+  estrato: cobertura_alta
+  distrito: Lince
+  cobertura: alta
+  banda: 1.5-2.5
+  dist_red_m: 1669
+  recinto_od: false
+  origen:
+    lat: -12.083656
+    lon: -77.023598
+  destino:
+    lat: -12.070946
+    lon: -77.024579
+  nota: aleatorio banda 1.5-2.5
+- id: lince_3
+  estrato: cobertura_alta
+  distrito: Lince
+  cobertura: alta
+  banda: 2.5-4
+  dist_red_m: 3713
+  recinto_od: false
+  origen:
+    lat: -12.072927
+    lon: -77.030294
+  destino:
+    lat: -12.052295
+    lon: -77.04772
+  nota: aleatorio banda 2.5-4
+- id: lince_4
+  estrato: cobertura_alta
+  distrito: Lince
+  cobertura: alta
+  banda: 2.5-4
+  dist_red_m: 3672
+  recinto_od: false
+  origen:
+    lat: -12.076719
+    lon: -77.026002
+  destino:
+    lat: -12.090756
+    lon: -77.002419
+  nota: aleatorio banda 2.5-4
+- id: jesusmaria_1
+  estrato: cobertura_alta
+  distrito: Jesús María
+  cobertura: alta
+  banda: 0.8-1.5
+  dist_red_m: 929
+  recinto_od: false
+  origen:
+    lat: -12.071401
+    lon: -77.037033
+  destino:
+    lat: -12.074169
+    lon: -77.03095
+  nota: aleatorio banda 0.8-1.5
+- id: jesusmaria_2
+  estrato: cobertura_alta
+  distrito: Jesús María
+  cobertura: alta
+  banda: 1.5-2.5
+  dist_red_m: 2012
+  recinto_od: false
+  origen:
+    lat: -12.067519
+    lon: -77.043747
+  destino:
+    lat: -12.07983
+    lon: -77.036325
+  nota: aleatorio banda 1.5-2.5
+- id: jesusmaria_3
+  estrato: cobertura_alta
+  distrito: Jesús María
+  cobertura: alta
+  banda: 2.5-4
+  dist_red_m: 3288
+  recinto_od: false
+  origen:
+    lat: -12.064692
+    lon: -77.041544
+  destino:
+    lat: -12.050987
+    lon: -77.023045
+  nota: aleatorio banda 2.5-4
+- id: jesusmaria_4
+  estrato: cobertura_alta
+  distrito: Jesús María
+  cobertura: alta
+  banda: 0.8-1.5
+  dist_red_m: 1080
+  recinto_od: false
+  origen:
+    lat: -12.071682
+    lon: -77.05442
+  destino:
+    lat: -12.077956
+    lon: -77.050362
+  nota: aleatorio banda 0.8-1.5
+- id: cercado_1
+  estrato: cobertura_alta
+  distrito: Cercado de Lima
+  cobertura: alta
+  banda: 0.8-1.5
+  dist_red_m: 1177
+  recinto_od: false
+  origen:
+    lat: -12.045133
+    lon: -77.030758
+  destino:
+    lat: -12.040859
+    lon: -77.024717
+  nota: aleatorio banda 0.8-1.5
+- id: cercado_2
+  estrato: cobertura_alta
+  distrito: Cercado de Lima
+  cobertura: alta
+  banda: 1.5-2.5
+  dist_red_m: 1712
+  recinto_od: false
+  origen:
+    lat: -12.052369
+    lon: -77.026487
+  destino:
+    lat: -12.061694
+    lon: -77.033139
+  nota: aleatorio banda 1.5-2.5
+- id: cercado_3
+  estrato: cobertura_alta
+  distrito: Cercado de Lima
+  cobertura: alta
+  banda: 2.5-4
+  dist_red_m: 3006
+  recinto_od: false
+  origen:
+    lat: -12.049045
+    lon: -77.025388
+  destino:
+    lat: -12.073484
+    lon: -77.024088
+  nota: aleatorio banda 2.5-4
+- id: cercado_4
+  estrato: cobertura_alta
+  distrito: Cercado de Lima
+  cobertura: alta
+  banda: 1.5-2.5
+  dist_red_m: 2200
+  recinto_od: false
+  origen:
+    lat: -12.053043
+    lon: -77.023952
+  destino:
+    lat: -12.064897
+    lon: -77.032191
+  nota: aleatorio banda 1.5-2.5
+- id: sjl_1
+  estrato: cobertura_baja
+  distrito: San Juan de Lurigancho
+  cobertura: baja
+  banda: 0.8-1.5
+  dist_red_m: 1182
+  recinto_od: false
+  origen:
+    lat: -11.986113
+    lon: -77.009079
+  destino:
+    lat: -11.989261
+    lon: -77.004551
+  nota: aleatorio banda 0.8-1.5
+- id: sjl_2
+  estrato: cobertura_baja
+  distrito: San Juan de Lurigancho
+  cobertura: baja
+  banda: 1.5-2.5
+  dist_red_m: 1547
+  recinto_od: false
+  origen:
+    lat: -11.978242
+    lon: -76.998592
+  destino:
+    lat: -11.967144
+    lon: -77.000688
+  nota: aleatorio banda 1.5-2.5
+- id: sjl_3
+  estrato: cobertura_baja
+  distrito: San Juan de Lurigancho
+  cobertura: baja
+  banda: 2.5-4
+  dist_red_m: 2827
+  recinto_od: false
+  origen:
+    lat: -11.990404
+    lon: -77.001749
+  destino:
+    lat: -11.973516
+    lon: -76.988399
+  nota: aleatorio banda 2.5-4
+- id: sjl_4
+  estrato: cobertura_baja
+  distrito: San Juan de Lurigancho
+  cobertura: baja
+  banda: 2.5-4
+  dist_red_m: 3734
+  recinto_od: false
+  origen:
+    lat: -11.992433
+    lon: -77.005831
+  destino:
+    lat: -12.019663
+    lon: -77.007244
+  nota: aleatorio banda 2.5-4
+- id: losolivos_1
+  estrato: cobertura_baja
+  distrito: Los Olivos
+  cobertura: baja
+  banda: 0.8-1.5
+  dist_red_m: 1177
+  recinto_od: false
+  origen:
+    lat: -11.97034
+    lon: -77.073108
+  destino:
+    lat: -11.967823
+    lon: -77.065601
+  nota: aleatorio banda 0.8-1.5
+- id: losolivos_2
+  estrato: cobertura_baja
+  distrito: Los Olivos
+  cobertura: baja
+  banda: 1.5-2.5
+  dist_red_m: 1822
+  recinto_od: false
+  origen:
+    lat: -11.975654
+    lon: -77.079012
+  destino:
+    lat: -11.983535
+    lon: -77.069181
+  nota: aleatorio banda 1.5-2.5
+- id: losolivos_3
+  estrato: cobertura_baja
+  distrito: Los Olivos
+  cobertura: baja
+  banda: 2.5-4
+  dist_red_m: 2857
+  recinto_od: false
+  origen:
+    lat: -11.969716
+    lon: -77.063313
+  destino:
+    lat: -11.948154
+    lon: -77.055094
+  nota: aleatorio banda 2.5-4
+- id: losolivos_4
+  estrato: cobertura_baja
+  distrito: Los Olivos
+  cobertura: baja
+  banda: 0.8-1.5
+  dist_red_m: 1070
+  recinto_od: false
+  origen:
+    lat: -11.973347
+    lon: -77.078588
+  destino:
+    lat: -11.977765
+    lon: -77.072501
+  nota: aleatorio banda 0.8-1.5
+- id: comas_1
+  estrato: cobertura_baja
+  distrito: Comas
+  cobertura: baja
+  banda: 0.8-1.5
+  dist_red_m: 986
+  recinto_od: false
+  origen:
+    lat: -11.93262
+    lon: -77.056138
+  destino:
+    lat: -11.930837
+    lon: -77.049978
+  nota: aleatorio banda 0.8-1.5
+- id: comas_2
+  estrato: cobertura_baja
+  distrito: Comas
+  cobertura: baja
+  banda: 1.5-2.5
+  dist_red_m: 1941
+  recinto_od: false
+  origen:
+    lat: -11.936345
+    lon: -77.052373
+  destino:
+    lat: -11.924368
+    lon: -77.043597
+  nota: aleatorio banda 1.5-2.5
+- id: comas_3
+  estrato: cobertura_baja
+  distrito: Comas
+  cobertura: baja
+  banda: 2.5-4
+  dist_red_m: 3715
+  recinto_od: false
+  origen:
+    lat: -11.930191
+    lon: -77.05346
+  destino:
+    lat: -11.924447
+    lon: -77.077344
+  nota: aleatorio banda 2.5-4
+- id: comas_4
+  estrato: cobertura_baja
+  distrito: Comas
+  cobertura: baja
+  banda: 1.5-2.5
+  dist_red_m: 2210
+  recinto_od: false
+  origen:
+    lat: -11.923837
+    lon: -77.050556
+  destino:
+    lat: -11.910702
+    lon: -77.050302
+  nota: aleatorio banda 1.5-2.5
+- id: ves_1
+  estrato: cobertura_baja
+  distrito: Villa El Salvador
+  cobertura: baja
+  banda: 0.8-1.5
+  dist_red_m: 903
+  recinto_od: false
+  origen:
+    lat: -12.210772
+    lon: -76.944037
+  destino:
+    lat: -12.214974
+    lon: -76.939178
+  nota: aleatorio banda 0.8-1.5
+- id: ves_2
+  estrato: cobertura_baja
+  distrito: Villa El Salvador
+  cobertura: baja
+  banda: 1.5-2.5
+  dist_red_m: 1601
+  recinto_od: false
+  origen:
+    lat: -12.210475
+    lon: -76.944964
+  destino:
+    lat: -12.198024
+    lon: -76.952463
+  nota: aleatorio banda 1.5-2.5
+- id: ves_3
+  estrato: cobertura_baja
+  distrito: Villa El Salvador
+  cobertura: baja
+  banda: 2.5-4
+  dist_red_m: 3419
+  recinto_od: false
+  origen:
+    lat: -12.213111
+    lon: -76.930299
+  destino:
+    lat: -12.192347
+    lon: -76.922232
+  nota: aleatorio banda 2.5-4
+- id: ves_4
+  estrato: cobertura_baja
+  distrito: Villa El Salvador
+  cobertura: baja
+  banda: 2.5-4
+  dist_red_m: 2811
+  recinto_od: false
+  origen:
+    lat: -12.205307
+    lon: -76.936075
+  destino:
+    lat: -12.188768
+    lon: -76.927263
+  nota: aleatorio banda 2.5-4
+- id: ate_1
+  estrato: cobertura_baja
+  distrito: Ate
+  cobertura: baja
+  banda: 0.8-1.5
+  dist_red_m: 1341
+  recinto_od: false
+  origen:
+    lat: -12.03371
+    lon: -76.912072
+  destino:
+    lat: -12.030133
+    lon: -76.902384
+  nota: aleatorio banda 0.8-1.5
+- id: ate_2
+  estrato: cobertura_baja
+  distrito: Ate
+  cobertura: baja
+  banda: 1.5-2.5
+  dist_red_m: 1755
+  recinto_od: false
+  origen:
+    lat: -12.028326
+    lon: -76.929105
+  destino:
+    lat: -12.033181
+    lon: -76.91829
+  nota: aleatorio banda 1.5-2.5
+- id: ate_3
+  estrato: cobertura_baja
+  distrito: Ate
+  cobertura: baja
+  banda: 2.5-4
+  dist_red_m: 3353
+  recinto_od: false
+  origen:
+    lat: -12.024942
+    lon: -76.923641
+  destino:
+    lat: -12.048761
+    lon: -76.924964
+  nota: aleatorio banda 2.5-4
+- id: ate_4
+  estrato: cobertura_baja
+  distrito: Ate
+  cobertura: baja
+  banda: 0.8-1.5
+  dist_red_m: 1318
+  recinto_od: false
+  origen:
+    lat: -12.033145
+    lon: -76.911587
+  destino:
+    lat: -12.027973
+    lon: -76.903328
+  nota: aleatorio banda 0.8-1.5
