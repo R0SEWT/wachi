@@ -19,3 +19,9 @@ __pycache__/
 
 # Beads / Dolt files (added by bd init)
 .beads/proxieddb/
+
+# Wachi
+api/data/
+.netlify/
+.env
+.superpowers/
