@@ -1,8 +1,11 @@
+import hashlib
+
 import numpy as np
+import pytest
 
 from tests.conftest import ll
 from wachi.geo import to_utm
-from wachi.graph import build_network, load_cache, save_cache, walk_ok
+from wachi.graph import CACHE_VERSION, build_network, load_cache, load_or_build, save_cache, walk_ok
 
 
 def test_walk_ok_rules():
@@ -61,3 +64,59 @@ def test_edge_xy_ab_and_reverse(net):
     assert (np.allclose(pts[0], a_xy, atol=0.01) and np.allclose(pts[1], b_xy, atol=0.01)) or \
         (np.allclose(pts[0], b_xy, atol=0.01) and np.allclose(pts[1], a_xy, atol=0.01))
     assert np.array_equal(net.edge_xy(e, True), pts[::-1])
+
+
+def _fake_osm(monkeypatch, ways):
+    import wachi.graph as g
+    calls = []
+
+    def fake_read(pbf, bbox, tags, counts=None):
+        calls.append(pbf)
+        return ways, []
+    monkeypatch.setattr(g, "read_osm", fake_read)
+    return calls
+
+
+def test_load_or_build_records_sha_and_version(cfg, ways, monkeypatch):
+    cfg.pbf_path = cfg.graph_cache.parent / "lima.osm.pbf"
+    cfg.pbf_path.write_bytes(b"pbf v1")
+    calls = _fake_osm(monkeypatch, ways)
+    net = load_or_build(cfg)
+    assert net.stats["pbf_sha256"] == hashlib.sha256(b"pbf v1").hexdigest()
+    assert net.stats["cache_version"] == CACHE_VERSION
+    load_or_build(cfg)
+    assert len(calls) == 1                       # la segunda vez sale de la caché
+
+
+def test_load_or_build_rebuilds_when_pbf_sha_differs(cfg, ways, monkeypatch, caplog):
+    cfg.pbf_path = cfg.graph_cache.parent / "lima.osm.pbf"
+    cfg.pbf_path.write_bytes(b"pbf v1")
+    calls = _fake_osm(monkeypatch, ways)
+    load_or_build(cfg)
+    cfg.pbf_path.write_bytes(b"pbf v2")
+    cfg.pbf_sha256 = hashlib.sha256(b"pbf v2").hexdigest()
+    with caplog.at_level("WARNING", logger="wachi.graph"):
+        net = load_or_build(cfg)
+    assert len(calls) == 2 and net.stats["pbf_sha256"] == cfg.pbf_sha256
+    assert "pbf_sha256" in caplog.text
+    assert load_cache(cfg.graph_cache).stats["pbf_sha256"] == cfg.pbf_sha256
+
+
+def test_load_or_build_rebuilds_old_cache_version(cfg, ways, net, monkeypatch, caplog):
+    cfg.pbf_path = cfg.graph_cache.parent / "lima.osm.pbf"
+    cfg.pbf_path.write_bytes(b"pbf v1")
+    save_cache(net, cfg.graph_cache)              # caché sin cache_version (como las de antes)
+    calls = _fake_osm(monkeypatch, ways)
+    with caplog.at_level("WARNING", logger="wachi.graph"):
+        out = load_or_build(cfg)
+    assert len(calls) == 1 and out.stats["cache_version"] == CACHE_VERSION
+    assert "cache_version" in caplog.text
+
+
+def test_load_or_build_refuses_pbf_with_wrong_sha(cfg, ways, monkeypatch):
+    cfg.pbf_path = cfg.graph_cache.parent / "lima.osm.pbf"
+    cfg.pbf_path.write_bytes(b"pbf v1")
+    cfg.pbf_sha256 = "0" * 64
+    _fake_osm(monkeypatch, ways)
+    with pytest.raises(ValueError, match="sha256"):
+        load_or_build(cfg)
