@@ -5,7 +5,9 @@
 
 document.addEventListener('DOMContentLoaded', () => {
 
-  const API_BASE = new URLSearchParams(window.location.search).get('api') || '/api';
+  // ?api= solo sirve en desarrollo local; en producción la PWA habla siempre con /api (proxy de Netlify)
+  const IS_LOCAL = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+  const API_BASE = (IS_LOCAL && new URLSearchParams(window.location.search).get('api')) || '/api';
   const ROUTE_MSG = {
     fuera_de_cobertura: 'Por ahora solo cubrimos Lima Metropolitana.',
     sin_via_peatonal_cerca: 'No hay una vía peatonal cerca de ese punto.',
@@ -15,13 +17,44 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let routeReqId = 0;      // descarta respuestas viejas
   let lastRoute = null;    // última respuesta válida de /route
+  let routeLoading = false;
+  let routeErrorMsg = null;
+  let routeRetryable = false;
+  let lastDestLabel = '';
+  const cardTranquila = document.getElementById('cardTranquila');
+  const cardRapida = document.getElementById('cardRapida');
 
-  function showRouteError(msg) {
+  function setSparse(card, text) {
+    card.querySelector('.sparse-desc').innerText = text;
+    card.querySelector('.card-metric-secondary').classList.toggle('hidden', !text);
+  }
+
+  // retryable: 503 o red; un 422 (fuera de Lima, sin vía cerca) no cambia por reintentar
+  function showRouteError(msg, retryable = false) {
+    routeLoading = false;
+    routeRetryable = retryable;
+    routeErrorMsg = msg;
     const el = document.getElementById('routeError');
-    if (!el) return;
-    el.innerText = msg;
-    el.classList.remove('hidden');
-    setTimeout(() => el.classList.add('hidden'), 5000);
+    if (el) {
+      el.innerText = msg;
+      el.classList.remove('hidden');
+    }
+    // En comparar y en el detalle el mensaje queda en la tarjeta hasta el próximo intento
+    const cardT = cardTranquila;
+    const cardR = cardRapida;
+    cardT.classList.add('hidden');
+    cardR.querySelector('.route-duration').innerText = '—';
+    cardR.querySelector('.delta-time').innerText = '';
+    cardR.querySelector('.delta-desc').innerText = retryable ? `${msg} Toca aquí para reintentar.` : msg;
+    setSparse(cardR, '');
+    renderDetail();
+    renderShare();
+  }
+
+  function hideRouteError() {
+    routeErrorMsg = null;
+    const el = document.getElementById('routeError');
+    if (el) el.classList.add('hidden');
   }
 
   function fmtMin(seconds) {
@@ -66,12 +99,29 @@ document.addEventListener('DOMContentLoaded', () => {
     preset: 'elena',           // 'elena' | 'mateo'
     theme: 'dark',             // 'dark' | 'light'
     selectedRoute: 'safe',     // 'safe' | 'fast'
-    timeBucket: '20:30',
     isDeviated: false,
     customOrigin: null,        // { name, coords: [lat, lon] }
     customDest: null,          // { name, coords: [lat, lon] }
     isPickingOnMap: false
   };
+
+  // Origen y destino en uso: lo que eligió la persona o, si no, el preset activo
+  function currentEndpoints() {
+    const data = PRESETS[state.preset];
+    return {
+      origin: state.customOrigin || { name: data.originName, coords: data.originCoords },
+      dest: state.customDest || { name: data.destName, coords: data.destCoords }
+    };
+  }
+
+  function parseCoords(v) {
+    const m = /^(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)$/.exec(v || '');
+    if (!m) return null;
+    const lat = Number(m[1]), lon = Number(m[2]);
+    return Math.abs(lat) <= 90 && Math.abs(lon) <= 180 ? [lat, lon] : null;
+  }
+
+  const fmtCoords = (c) => `${c[0].toFixed(5)},${c[1].toFixed(5)}`;
 
   // =========================================================================
   // 3. Inicialización del Mapa (Leaflet)
@@ -98,8 +148,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let destMarker = null;
   let liveGpsMarker = null;
 
-  function initMapLayers() {
-    const data = PRESETS[state.preset];
+  function initMapLayers(preferred = 'safe') {
+    const { origin, dest } = currentEndpoints();
 
     // Limpiar capas previas
     if (layerTranquila) map.removeLayer(layerTranquila);
@@ -130,8 +180,8 @@ document.addEventListener('DOMContentLoaded', () => {
       iconAnchor: [7, 7]
     });
 
-    originMarker = L.marker(data.originCoords, { icon: iconOrigin }).addTo(map);
-    destMarker = L.marker(data.destCoords, { icon: iconDest }).addTo(map);
+    originMarker = L.marker(origin.coords, { icon: iconOrigin }).addTo(map);
+    destMarker = L.marker(dest.coords, { icon: iconDest }).addTo(map);
 
     // Marcador GPS en marcha
     const iconLiveGps = L.divIcon({
@@ -140,10 +190,10 @@ document.addEventListener('DOMContentLoaded', () => {
       iconSize: [16, 16],
       iconAnchor: [8, 8]
     });
-    liveGpsMarker = L.marker(data.originCoords, { icon: iconLiveGps });
+    liveGpsMarker = L.marker(origin.coords, { icon: iconLiveGps });
 
-    map.setView(data.originCoords, 15);
-    calculateDynamicRoute(data.originCoords, data.destCoords, data.destName);
+    map.setView(origin.coords, 15);
+    calculateDynamicRoute(origin.coords, dest.coords, dest.name, preferred);
   }
 
   // =========================================================================
@@ -176,7 +226,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (screenName === 'share') {
-      updateShareUrl();
+      renderShare();
     }
 
     if (updateHistory) {
@@ -192,9 +242,22 @@ document.addEventListener('DOMContentLoaded', () => {
     params.set('screen', state.screen);
     params.set('preset', state.preset);
     params.set('route', state.selectedRoute);
-    params.set('time', state.timeBucket);
     params.set('theme', state.theme);
+    addEndpointParams(params);
+    const api = new URLSearchParams(window.location.search).get('api');
+    if (IS_LOCAL && api) params.set('api', api);
     window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
+  }
+
+  function addEndpointParams(params) {
+    if (state.customOrigin) {
+      params.set('o', fmtCoords(state.customOrigin.coords));
+      params.set('on', state.customOrigin.name);
+    }
+    if (state.customDest) {
+      params.set('d', fmtCoords(state.customDest.coords));
+      params.set('dn', state.customDest.name);
+    }
   }
 
   function readUrlParams() {
@@ -205,17 +268,28 @@ document.addEventListener('DOMContentLoaded', () => {
     if (params.get('theme')) {
       state.theme = params.get('theme');
     }
-    if (params.get('time')) {
-      state.timeBucket = params.get('time');
-    }
-    if (params.get('route')) {
+    if (params.get('route') === 'fast' || params.get('route') === 'safe') {
       state.selectedRoute = params.get('route');
+    }
+    if (params.get('salida') && /^\d{2}:\d{2}$/.test(params.get('salida'))) {
+      sharedDeparture = params.get('salida');
     }
     const initialScreen = params.get('screen') || 'search';
 
     applyTheme(state.theme);
     updatePresetUI();
-    initMapLayers();
+    const o = parseCoords(params.get('o'));
+    const d = parseCoords(params.get('d'));
+    if (o) {
+      state.customOrigin = { name: params.get('on') || `Punto (${o[0].toFixed(4)}, ${o[1].toFixed(4)})`, coords: o };
+      inputOrigin.value = state.customOrigin.name;
+    }
+    if (d) {
+      state.customDest = { name: params.get('dn') || `Punto (${d[0].toFixed(4)}, ${d[1].toFixed(4)})`, coords: d };
+      inputDest.value = state.customDest.name;
+    }
+    if (o || d) presetChips.forEach(chip => chip.classList.remove('active'));
+    initMapLayers(state.selectedRoute);
     setScreen(initialScreen, false);
 
     if (params.get('pocket') === '1') {
@@ -241,10 +315,68 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  function updateShareUrl() {
-    const fullUrl = `${window.location.origin}${window.location.pathname}?screen=share&preset=${state.preset}&route=${state.selectedRoute}&time=${state.timeBucket}`;
+  // Hora de salida que trae un enlace compartido (HH:MM); si no hay, la salida es ahora
+  let sharedDeparture = null;
+
+  const fmtClock = (d) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+
+  function departureDate() {
+    const now = new Date();
+    now.setSeconds(0, 0);       // la salida viaja como HH:MM: quien abre el enlace calcula la misma llegada
+    if (!sharedDeparture) return now;
+    const [h, m] = sharedDeparture.split(':').map(Number);
+    const d = new Date(now);
+    d.setHours(h, m, 0, 0);
+    return d;
+  }
+
+  function chosenRoute() {
+    if (!lastRoute) return null;
+    return state.selectedRoute === 'fast' || !lastRoute.calm ? lastRoute.fast : lastRoute.calm;
+  }
+
+  function routeName() {
+    return state.selectedRoute === 'fast' || !(lastRoute && lastRoute.calm) ? 'Rápida' : 'Tranquila';
+  }
+
+  // Vista acompañante: todo sale de la ruta calculada; sin ruta no hay enlace ni hora
+  function renderShare() {
+    const { origin, dest } = currentEndpoints();
+    const route = chosenRoute();
+    const pomTime = document.querySelector('.pom-time');
+    const pomTitle = document.querySelector('.pom-title');
+    const shareDest = document.getElementById('shareDest');
+    const shareEta = document.getElementById('shareEta');
     const shareInput = document.getElementById('shareUrlInput');
-    if (shareInput) shareInput.value = fullUrl;
+    const shareBox = document.querySelector('.share-link-box');
+    const btnWpp = document.getElementById('btnShareWhatsApp');
+    const destShort = (lastDestLabel || dest.name).split('(')[0].trim();
+    if (shareDest) shareDest.innerText = lastDestLabel || dest.name;
+    if (!route) {
+      if (pomTitle) pomTitle.innerText = routeErrorMsg || 'Calculando la ruta…';
+      if (pomTime) pomTime.innerText = '';
+      if (shareEta) shareEta.innerText = '—';
+      if (shareBox) shareBox.classList.add('hidden');
+      if (btnWpp) btnWpp.classList.add('hidden');
+      return;
+    }
+    const salida = departureDate();
+    const llegada = new Date(salida.getTime() + route.duration_s * 1000);
+    if (pomTitle) pomTitle.innerText = `Caminando hacia ${destShort} por la ruta ${routeName()}`;
+    if (pomTime) pomTime.innerText = `Salida: ${fmtClock(salida)}`;
+    if (shareEta) shareEta.innerText = `${fmtClock(llegada)} (${fmtMin(route.duration_s)} a pie, ${fmtDist(route.distance_m)})`;
+    const params = new URLSearchParams();
+    params.set('screen', 'share');
+    params.set('route', state.selectedRoute);
+    // Siempre las coordenadas reales, aunque vengan de un preset
+    params.set('o', fmtCoords(origin.coords));
+    params.set('on', origin.name);
+    params.set('d', fmtCoords(dest.coords));
+    params.set('dn', lastDestLabel || dest.name);
+    params.set('salida', fmtClock(salida));
+    if (shareInput) shareInput.value = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+    if (shareBox) shareBox.classList.remove('hidden');
+    if (btnWpp) btnWpp.classList.remove('hidden');
   }
 
   // =========================================================================
@@ -294,30 +426,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (clearOrig) clearOrig.classList.add('hidden');
     const dropdown = document.getElementById('autocompleteDropdown');
     if (dropdown) dropdown.classList.add('hidden');
-    // Actualizar modo En Marcha & Glanceable Turn Card
     const walkingDest = document.querySelector('.walking-dest-name');
     if (walkingDest) walkingDest.innerText = data.destName;
-
-    const turnDist = document.querySelector('.turn-dist');
-    const turnInst = document.querySelector('.turn-instruction');
-    const turnLandmark = document.querySelector('.turn-landmark');
-    if (turnDist && turnInst && turnLandmark) {
-      if (state.preset === 'elena') {
-        turnDist.innerText = 'EN 140 METROS';
-        turnInst.innerText = 'Continúa por Av. Arequipa';
-        turnLandmark.innerText = '👁 Hito: Vereda ancha y paradero cercano';
-      } else {
-        turnDist.innerText = 'EN 90 METROS';
-        turnInst.innerText = 'Sigue por Av. Universitaria';
-        turnLandmark.innerText = '👁 Hito: Avenida con comercio abierto';
-      }
-    }
-
-    // Actualizar vista Compartir / Acompañante
-    const pomTitle = document.querySelector('.pom-title');
-    if (pomTitle) pomTitle.innerText = `${data.name} va caminando por ruta tranquila`;
-    const btnCall = document.querySelector('.btn-call span');
-    if (btnCall) btnCall.innerText = `Llamar a ${data.name}`;
 
     presetChips.forEach(chip => {
       chip.classList.toggle('active', chip.dataset.preset === state.preset);
@@ -491,10 +601,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Desactivar chips de presets al usar una ubicación personalizada
     presetChips.forEach(chip => chip.classList.remove('active'));
 
-    const originCoords = state.customOrigin ? state.customOrigin.coords : PRESETS[state.preset].originCoords;
-    const destCoords = state.customDest ? state.customDest.coords : PRESETS[state.preset].destCoords;
-
-    calculateDynamicRoute(originCoords, destCoords, state.customDest ? state.customDest.name : 'Destino seleccionado');
+    const { origin, dest } = currentEndpoints();
+    calculateDynamicRoute(origin.coords, dest.coords, dest.name);
+    updateUrlParams();
   }
 
   function resetRouteUI() {
@@ -510,7 +619,9 @@ document.addEventListener('DOMContentLoaded', () => {
       card.querySelector('.delta-time').innerText = '';
       card.querySelector('.delta-desc').innerText = '· calculando…';
     });
-    cardT.querySelector('.sparse-desc').innerText = '';
+    setSparse(cardT, '');
+    setSparse(cardR, '');
+    renderDetail();
     const etaMins = document.querySelector('.eta-mins');
     if (etaMins) etaMins.innerText = '—';
     const etaDist = document.querySelector('.eta-dist');
@@ -518,16 +629,103 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function updateChosenSummary() {
-    if (!lastRoute) return;
-    const chosen = state.selectedRoute === 'fast' || !lastRoute.calm ? lastRoute.fast : lastRoute.calm;
+    const chosen = chosenRoute();
+    if (!chosen) return;
     const etaMins = document.querySelector('.eta-mins');
     if (etaMins) etaMins.innerText = fmtMin(chosen.duration_s);
     const etaDist = document.querySelector('.eta-dist');
     if (etaDist) etaDist.innerText = fmtDist(chosen.distance_m);
+    drawSparse();
+    renderDetail();
+    renderShare();
   }
 
-  async function calculateDynamicRoute(originCoords, destCoords, destLabel) {
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+  function benefitText(calm) {
+    const blocks = calm.blocks_fewer_near_robberies;
+    return blocks > 0
+      ? `pasa ${plural(blocks, 'cuadra', 'cuadras')} menos junto a robos registrados`
+      : `${calm.exposure_reduction_pct} % menos robos registrados cerca`;
+  }
+
+  const detourMin = (calm) => `+${Math.max(1, Math.round(calm.detour_s / 60))} min`;
+
+  // Tramos con pocos datos de la ruta elegida (ADR 011 #4: se marcan siempre, también en la Rápida)
+  function drawSparse() {
+    if (layerSparse) { map.removeLayer(layerSparse); layerSparse = null; }
+    const chosen = chosenRoute();
+    if (!chosen) return;
+    const sparse = sliceSegments(chosen.geometry, chosen.low_data_segments);
+    if (sparse.length) {
+      layerSparse = L.polyline(sparse, { color: '#94a3b8', weight: 6, dashArray: '4, 10', opacity: 0.9 }).addTo(map);
+    }
+  }
+
+  // Pantalla 3 ("Por qué este camino"): solo cifras de la respuesta de /route
+  function renderDetail() {
+    const summary = document.getElementById('detailSummary');
+    const benefit = document.getElementById('detailBenefit');
+    const sparseLi = document.getElementById('detailSparse');
+    const source = document.getElementById('detailSource');
+    if (!summary) return;
+    const chosen = chosenRoute();
+    [benefit, sparseLi, source].forEach(el => el.classList.add('hidden'));
+    if (!chosen) {
+      summary.innerText = routeErrorMsg || 'Calculando…';
+      return;
+    }
+    const { fast, calm } = lastRoute;
+    const isCalm = chosen === calm;
+    summary.innerText = `Ruta ${routeName()} · ${fmtMin(chosen.duration_s)} · ${fmtDist(chosen.distance_m)}`;
+    let title, desc;
+    if (isCalm) {
+      title = `${detourMin(calm)} · ${benefitText(calm)}`;
+      desc = `Camina ${calm.detour_m} m más que la Rápida (${fmtMin(fast.duration_s)} · ${fmtDist(fast.distance_m)}).`;
+    } else if (calm) {
+      title = 'La más corta';
+      desc = `La Tranquila toma ${detourMin(calm)} · ${benefitText(calm)}.`;
+    } else {
+      title = 'La más corta';
+      desc = 'No hay un desvío que valga la pena.';
+    }
+    benefit.querySelector('strong').innerText = title;
+    benefit.querySelector('p').innerText = desc;
+    benefit.classList.remove('hidden');
+    const n = chosen.low_data_segments.length;
+    if (n) {
+      sparseLi.querySelector('strong').innerText = `${plural(n, 'tramo', 'tramos')} con pocos datos`;
+      sparseLi.classList.remove('hidden');
+    }
+    source.querySelector('strong').innerText = `Robos y hurtos registrados hasta ${lastRoute.data_as_of}`;
+    const radius = lastRoute.params && lastRoute.params.radius_m;
+    source.querySelector('p').innerText = radius
+      ? `Se cuentan los registrados por la PNP a ${Math.round(radius)} m o menos del camino.`
+      : 'Registros de la PNP.';
+    source.classList.remove('hidden');
+  }
+
+  // Marca la tarjeta elegida y resalta su trazo
+  function selectRoute(which) {
+    state.selectedRoute = which;
+    const safe = which === 'safe';
+    cardTranquila.classList.toggle('selected', safe);
+    cardRapida.classList.toggle('selected', !safe);
+    cardTranquila.querySelector('.card-radio').innerText = safe ? '●' : '○';
+    cardRapida.querySelector('.card-radio').innerText = safe ? '○' : '●';
+    if (layerTranquila && layerRapida) {
+      (safe ? layerTranquila : layerRapida).setStyle({ opacity: 0.95, weight: 5.5 });
+      (safe ? layerRapida : layerTranquila).setStyle({ opacity: 0.4, weight: 3 });
+    }
+  }
+
+  async function calculateDynamicRoute(originCoords, destCoords, destLabel, preferred = 'safe') {
     const reqId = ++routeReqId;
+    lastDestLabel = destLabel;
+    routeLoading = true;
+    hideRouteError();
+    // Cada ruta nueva empieza en la Tranquila: un `calm: null` anterior no fija la Rápida para siempre
+    selectRoute(preferred === 'fast' ? 'fast' : 'safe');
     resetRouteUI();
     let resp, data;
     try {
@@ -543,13 +741,14 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (err) {
       if (reqId !== routeReqId) return;
       console.warn('[Wachi] Error pidiendo la ruta:', err);
-      showRouteError(ROUTE_MSG.iniciando);
+      showRouteError(ROUTE_MSG.iniciando, true);
       return;
     }
     if (reqId !== routeReqId) return;
     if (!resp.ok) {
       const known = ROUTE_MSG[data && data.error];
-      showRouteError(known || (resp.status >= 500 ? ROUTE_MSG.iniciando : 'No pudimos calcular la ruta.'));
+      const retryable = resp.status >= 500 || resp.status === 429;
+      showRouteError(known || (retryable ? ROUTE_MSG.iniciando : 'No pudimos calcular la ruta.'), retryable);
       return;
     }
     try {
@@ -563,51 +762,47 @@ document.addEventListener('DOMContentLoaded', () => {
   function renderRoutes(data, destLabel) {
     const fast = data.fast;
     const calm = data.calm;
-    const shown = calm || fast;             // lo que se traza como "Tranquila" si no hay calm es la rápida
 
     if (layerRapida) layerRapida.setLatLngs(fast.geometry);
-    if (layerTranquila) layerTranquila.setLatLngs(shown.geometry);
-    if (layerSparse) { map.removeLayer(layerSparse); layerSparse = null; }
-    const sparse = sliceSegments(shown.geometry, shown.low_data_segments);
-    if (sparse.length) {
-      layerSparse = L.polyline(sparse, { color: '#94a3b8', weight: 6, dashArray: '4, 10', opacity: 0.9 }).addTo(map);
-    }
+    // Sin Tranquila no se repite la Rápida en verde
+    if (layerTranquila) layerTranquila.setLatLngs(calm ? calm.geometry : []);
 
+    const sparseText = (route) => {
+      const n = route.low_data_segments.length;
+      return n ? `${plural(n, 'tramo', 'tramos')} con pocos datos` : 'Cobertura normal en el tramo';
+    };
     const cardT = document.getElementById('cardTranquila');
     const cardR = document.getElementById('cardRapida');
     if (calm) {
       cardT.classList.remove('hidden');
       cardT.querySelector('.route-duration').innerText = fmtMin(calm.duration_s);
-      cardT.querySelector('.delta-time').innerText = `+${Math.max(1, Math.round(calm.detour_s / 60))} min`;
-      const blocks = calm.blocks_fewer_near_robberies;
-      cardT.querySelector('.delta-desc').innerText = blocks > 0
-        ? `· pasa ${blocks} cuadra${blocks === 1 ? '' : 's'} menos junto a robos registrados`
-        : `· ${calm.exposure_reduction_pct} % menos robos registrados cerca`;
-      const n = calm.low_data_segments.length;
-      cardT.querySelector('.sparse-desc').innerText = n
-        ? `${n} tramo${n === 1 ? '' : 's'} con pocos datos` : 'Cobertura normal en el tramo';
+      cardT.querySelector('.delta-time').innerText = detourMin(calm);
+      cardT.querySelector('.delta-desc').innerText = `· ${benefitText(calm)}`;
+      setSparse(cardT, sparseText(calm));
     } else {
       cardT.classList.add('hidden');
-      if (state.selectedRoute === 'safe') cardR.click();
     }
     cardR.querySelector('.route-duration').innerText = fmtMin(fast.duration_s);
     cardR.querySelector('.delta-time').innerText = 'Directa';
     cardR.querySelector('.delta-desc').innerText = calm
       ? '· La más corta; pasa junto a más robos registrados'
       : '· La más corta; no hay un desvío que valga la pena';
+    setSparse(cardR, sparseText(fast));
 
     lastRoute = data;
+    routeLoading = false;
+    if (!calm) selectRoute('fast');
     const walkingDest = document.querySelector('.walking-dest-name');
     if (walkingDest) walkingDest.innerText = destLabel;
     updateChosenSummary();
     const turnInst = document.querySelector('.turn-instruction');
     if (turnInst) turnInst.innerText = `Rumbo a ${destLabel.split('(')[0].trim()}`;
-    const pomTitle = document.querySelector('.pom-title');
-    if (pomTitle) pomTitle.innerText = `Caminando hacia ${destLabel.split('(')[0].trim()}`;
     const asOf = document.getElementById('dataAsOf');
     if (asOf) asOf.innerText = `Robos y hurtos registrados hasta ${data.data_as_of}`;
 
-    map.fitBounds(layerTranquila.getBounds(), { padding: [50, 50], maxZoom: 16 });
+    const bounds = L.latLngBounds(fast.geometry);
+    if (calm) bounds.extend(L.latLngBounds(calm.geometry));
+    map.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 });
   }
 
   async function reverseGeocode(lat, lon) {
@@ -667,8 +862,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     presetChips.forEach(chip => chip.classList.remove('active'));
 
-    const originCoords = state.customOrigin ? state.customOrigin.coords : PRESETS[state.preset].originCoords;
-    calculateDynamicRoute(originCoords, coords, label);
+    calculateDynamicRoute(currentEndpoints().origin.coords, coords, label);
+    updateUrlParams();
   }
 
   // Listeners de búsqueda con Debounce (280ms)
@@ -775,13 +970,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (btnClearOrigin) btnClearOrigin.classList.remove('hidden');
             state.customOrigin = { name: label, coords };
             map.setView(coords, 16);
-            const destCoords = state.customDest ? state.customDest.coords : PRESETS[state.preset].destCoords;
-            calculateDynamicRoute(coords, destCoords, state.customDest ? state.customDest.name : PRESETS[state.preset].destName);
+            const { dest } = currentEndpoints();
+            calculateDynamicRoute(coords, dest.coords, dest.name);
+            updateUrlParams();
           },
           (err) => {
             console.warn('[Wachi GPS] Ubicación no autorizada:', err);
-            const coords = PRESETS[state.preset].originCoords;
-            map.setView(coords, 16);
+            map.setView(currentEndpoints().origin.coords, 16);
           },
           { enableHighAccuracy: true, timeout: 6000 }
         );
@@ -794,34 +989,35 @@ document.addEventListener('DOMContentLoaded', () => {
   // =========================================================================
 
   // Pantalla 1 -> 2: Comparar Rutas
+  // Sin ruta (falló o nunca llegó), "Comparar rutas" o tocar la tarjeta con el error la vuelven a pedir
+  function retryRoute() {
+    if (lastRoute || routeLoading) return false;
+    const { origin, dest } = currentEndpoints();
+    calculateDynamicRoute(origin.coords, dest.coords, dest.name);
+    return true;
+  }
+
   document.getElementById('btnCalculateRoute').addEventListener('click', () => {
+    retryRoute();
     setScreen('compare');
   });
 
   // Selección de Tarjeta (Tranquila vs Rápida)
-  const cardTranquila = document.getElementById('cardTranquila');
-  const cardRapida = document.getElementById('cardRapida');
-
   cardTranquila.addEventListener('click', () => {
-    state.selectedRoute = 'safe';
-    cardTranquila.classList.add('selected');
-    cardRapida.classList.remove('selected');
-    cardTranquila.querySelector('.card-radio').innerText = '●';
-    cardRapida.querySelector('.card-radio').innerText = '○';
-    layerTranquila.setStyle({ opacity: 0.95, weight: 5.5 });
-    layerRapida.setStyle({ opacity: 0.4, weight: 3 });
+    if (!lastRoute || !lastRoute.calm) return;
+    selectRoute('safe');
     updateChosenSummary();
+    updateUrlParams();
   });
 
   cardRapida.addEventListener('click', () => {
-    state.selectedRoute = 'fast';
-    cardRapida.classList.add('selected');
-    cardTranquila.classList.remove('selected');
-    cardRapida.querySelector('.card-radio').innerText = '●';
-    cardTranquila.querySelector('.card-radio').innerText = '○';
-    layerRapida.setStyle({ opacity: 0.95, weight: 5.5 });
-    layerTranquila.setStyle({ opacity: 0.4, weight: 3 });
+    if (!lastRoute) {
+      if (routeRetryable) retryRoute();
+      return;
+    }
+    selectRoute('fast');
     updateChosenSummary();
+    updateUrlParams();
   });
 
   // Pantalla 2 -> 3: Ver Detalle
@@ -900,8 +1096,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // 10. Fallback a Google Maps con Advertencia
   // =========================================================================
   document.getElementById('btnOpenGoogleMaps').addEventListener('click', () => {
-    const data = PRESETS[state.preset];
-    const url = `https://www.google.com/maps/dir/?api=1&origin=${data.originCoords[0]},${data.originCoords[1]}&destination=${data.destCoords[0]},${data.destCoords[1]}&travelmode=walking`;
+    const { origin, dest } = currentEndpoints();
+    const url = `https://www.google.com/maps/dir/?api=1&origin=${origin.coords[0]},${origin.coords[1]}&destination=${dest.coords[0]},${dest.coords[1]}&travelmode=walking`;
     const confirmRedirect = confirm(
       'Aviso de Wachi:\n\nGoogle Maps calculará el camino más directo y podría desviarte hacia calles más transitadas o con mayor exposición que las recomendadas aquí.\n\n¿Deseas abrir Google Maps de todos modos?'
     );
@@ -925,7 +1121,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('btnShareWhatsApp').addEventListener('click', () => {
     const shareInput = document.getElementById('shareUrlInput').value;
-    const text = `Hola, voy caminando por una ruta tranquila que calculé con Wachi. Puedes ver mi trayecto y hora estimada aquí: ${shareInput}`;
+    const text = `Hola, voy caminando por la ruta ${routeName()} que calculé con Wachi. Puedes ver mi trayecto y hora estimada aquí: ${shareInput}`;
     window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
   });
 
@@ -950,35 +1146,9 @@ document.addEventListener('DOMContentLoaded', () => {
     modalOnboarding.classList.remove('hidden');
   });
 
-  // Selector de franja horaria
-  const modalTimePicker = document.getElementById('modalTimePicker');
-  const btnTimeSelect = document.getElementById('btnTimeSelect');
-  const btnCloseTimePicker = document.getElementById('btnCloseTimePicker');
-
-  btnTimeSelect.addEventListener('click', () => {
-    modalTimePicker.classList.remove('hidden');
-  });
-
-  btnCloseTimePicker.addEventListener('click', () => {
-    modalTimePicker.classList.add('hidden');
-  });
-
-  document.querySelectorAll('.time-bucket-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.time-bucket-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      state.timeBucket = btn.dataset.hour;
-      document.getElementById('timeLabel').innerText = `${state.timeBucket} (${btn.innerText.split(' ')[0]})`;
-      document.getElementById('badgeCurrentTime').innerText = `${state.timeBucket} h`;
-      modalTimePicker.classList.add('hidden');
-      updateUrlParams();
-    });
-  });
-
   // Recentrar mapa
   document.getElementById('btnRecenterGPS').addEventListener('click', () => {
-    const data = PRESETS[state.preset];
-    map.setView(data.originCoords, 16);
+    map.setView(currentEndpoints().origin.coords, 16);
   });
 
   // Simulación de precache offline
