@@ -52,7 +52,7 @@ def test_route_no_way_nearby(client):
 
 def test_route_validation(client):
     r = client.post("/route", json={"origin": {"lat": 1}})
-    assert r.status_code == 422
+    assert r.status_code == 422 and r.json() == {"error": "peticion_invalida"}
 
 
 def test_503_while_loading(cfg):
@@ -60,3 +60,43 @@ def test_503_while_loading(cfg):
     assert c.get("/health").status_code == 503
     r = c.post("/route", json=body(ll(0, 0), ll(1000, 0)))
     assert r.status_code == 503 and r.json()["error"] == "iniciando"
+
+
+def test_load_failure_exits_and_health_reports_error(cfg, monkeypatch):
+    import threading
+
+    import wachi.api as api_mod
+
+    exited = threading.Event()
+    codes = []
+
+    def boom(_cfg):
+        raise RuntimeError("pbf corrupto")
+
+    def fake_exit(code):
+        codes.append(code)
+        exited.set()
+
+    monkeypatch.setattr(api_mod, "load_engine", boom)
+    monkeypatch.setattr(api_mod.os, "_exit", fake_exit)
+    with TestClient(create_app(None, cfg, load_on_start=True)) as c:
+        assert exited.wait(5)
+        assert codes == [1]
+        r = c.get("/health")
+        assert r.status_code == 500 and r.json() == {"status": "error"}
+
+
+@pytest.mark.parametrize("raw", [
+    '{"origin": {"lat": NaN, "lon": -77.03}, "destination": {"lat": -12.08, "lon": -77.03}}',
+    '{"origin": {"lat": -12.08, "lon": Infinity}, "destination": {"lat": -12.08, "lon": -77.03}}',
+    '{"origin": {"lat": 1}}',
+    '{no es json',
+])
+def test_malformed_body_is_422(client, raw):
+    r = client.post("/route", content=raw, headers={"content-type": "application/json"})
+    assert r.status_code == 422 and r.json() == {"error": "peticion_invalida"}
+
+
+def test_docs_disabled(client):
+    for path in ("/docs", "/redoc", "/openapi.json"):
+        assert client.get(path).status_code == 404
