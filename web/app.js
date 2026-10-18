@@ -13,6 +13,9 @@ document.addEventListener('DOMContentLoaded', () => {
     iniciando: 'El servicio está iniciando, intenta en un momento.'
   };
 
+  let routeReqId = 0;      // descarta respuestas viejas
+  let lastRoute = null;    // última respuesta válida de /route
+
   function showRouteError(msg) {
     const el = document.getElementById('routeError');
     if (!el) return;
@@ -494,9 +497,41 @@ document.addEventListener('DOMContentLoaded', () => {
     calculateDynamicRoute(originCoords, destCoords, state.customDest ? state.customDest.name : 'Destino seleccionado');
   }
 
+  function resetRouteUI() {
+    lastRoute = null;
+    if (layerRapida) layerRapida.setLatLngs([]);
+    if (layerTranquila) layerTranquila.setLatLngs([]);
+    if (layerSparse) { map.removeLayer(layerSparse); layerSparse = null; }
+    const cardT = document.getElementById('cardTranquila');
+    const cardR = document.getElementById('cardRapida');
+    cardT.classList.remove('hidden');
+    [[cardT, ''], [cardR, '']].forEach(([card]) => {
+      card.querySelector('.route-duration').innerText = '—';
+      card.querySelector('.delta-time').innerText = '';
+      card.querySelector('.delta-desc').innerText = '· calculando…';
+    });
+    cardT.querySelector('.sparse-desc').innerText = '';
+    const etaMins = document.querySelector('.eta-mins');
+    if (etaMins) etaMins.innerText = '—';
+    const etaDist = document.querySelector('.eta-dist');
+    if (etaDist) etaDist.innerText = '—';
+  }
+
+  function updateChosenSummary() {
+    if (!lastRoute) return;
+    const chosen = state.selectedRoute === 'fast' || !lastRoute.calm ? lastRoute.fast : lastRoute.calm;
+    const etaMins = document.querySelector('.eta-mins');
+    if (etaMins) etaMins.innerText = fmtMin(chosen.duration_s);
+    const etaDist = document.querySelector('.eta-dist');
+    if (etaDist) etaDist.innerText = fmtDist(chosen.distance_m);
+  }
+
   async function calculateDynamicRoute(originCoords, destCoords, destLabel) {
+    const reqId = ++routeReqId;
+    resetRouteUI();
+    let resp, data;
     try {
-      const resp = await fetch(`${API_BASE}/route`, {
+      resp = await fetch(`${API_BASE}/route`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -504,15 +539,24 @@ document.addEventListener('DOMContentLoaded', () => {
           destination: { lat: destCoords[0], lon: destCoords[1] }
         })
       });
-      const data = await resp.json().catch(() => ({}));
-      if (!resp.ok) {
-        showRouteError(ROUTE_MSG[data.error] || 'No pudimos calcular la ruta.');
-        return;
-      }
-      renderRoutes(data, destLabel);
+      data = await resp.json().catch(() => ({}));
     } catch (err) {
+      if (reqId !== routeReqId) return;
       console.warn('[Wachi] Error pidiendo la ruta:', err);
       showRouteError(ROUTE_MSG.iniciando);
+      return;
+    }
+    if (reqId !== routeReqId) return;
+    if (!resp.ok) {
+      const known = ROUTE_MSG[data && data.error];
+      showRouteError(known || (resp.status >= 500 ? ROUTE_MSG.iniciando : 'No pudimos calcular la ruta.'));
+      return;
+    }
+    try {
+      renderRoutes(data, destLabel);
+    } catch (err) {
+      console.error('[Wachi] Error pintando la ruta:', err);
+      showRouteError('No pudimos calcular la ruta.');
     }
   }
 
@@ -552,13 +596,10 @@ document.addEventListener('DOMContentLoaded', () => {
       ? '· La más corta; pasa junto a más robos registrados'
       : '· La más corta; no hay un desvío que valga la pena';
 
-    const chosen = state.selectedRoute === 'fast' || !calm ? fast : calm;
+    lastRoute = data;
     const walkingDest = document.querySelector('.walking-dest-name');
     if (walkingDest) walkingDest.innerText = destLabel;
-    const etaMins = document.querySelector('.eta-mins');
-    if (etaMins) etaMins.innerText = fmtMin(chosen.duration_s);
-    const etaDist = document.querySelector('.eta-dist');
-    if (etaDist) etaDist.innerText = fmtDist(chosen.distance_m);
+    updateChosenSummary();
     const turnInst = document.querySelector('.turn-instruction');
     if (turnInst) turnInst.innerText = `Rumbo a ${destLabel.split('(')[0].trim()}`;
     const pomTitle = document.querySelector('.pom-title');
@@ -769,6 +810,7 @@ document.addEventListener('DOMContentLoaded', () => {
     cardRapida.querySelector('.card-radio').innerText = '○';
     layerTranquila.setStyle({ opacity: 0.95, weight: 5.5 });
     layerRapida.setStyle({ opacity: 0.4, weight: 3 });
+    updateChosenSummary();
   });
 
   cardRapida.addEventListener('click', () => {
@@ -779,6 +821,7 @@ document.addEventListener('DOMContentLoaded', () => {
     cardTranquila.querySelector('.card-radio').innerText = '○';
     layerRapida.setStyle({ opacity: 0.95, weight: 5.5 });
     layerTranquila.setStyle({ opacity: 0.4, weight: 3 });
+    updateChosenSummary();
   });
 
   // Pantalla 2 -> 3: Ver Detalle
