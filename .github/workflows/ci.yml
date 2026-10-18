@@ -9,6 +9,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
-      - run: uv sync
+      - run: uv sync --locked
       - run: uv run ruff check .
       - run: uv run pytest -q
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - name: sintaxis de la PWA
+        working-directory: .
+        run: node --check web/app.js && node --check web/sw.js
+      - name: copy prohibido en web/ (ADR 011)
+        working-directory: .
+        run: |
+          if grep -rniE 'esquinas|segura|iluminada|serenazgo|bares|arrebato|franja|celular|solitaria' web/; then
+            echo "::error::web/ usa palabras que el ADR 011 prohíbe"
+            exit 1
+          fi
