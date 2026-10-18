@@ -12,3 +12,9 @@ under Reporting Bias: Evidence from Peru* (Vilchez, Velasquez, Alarcon; SIMBig 2
 Springer CCIS). Replicación: https://github.com/R0SEWT/Crime-Prediction-Learn-under-Reporting-Bias
 
 Los datos de SIDPOL no se distribuyen con el repo; la API solo devuelve agregados por ruta.
+
+## Datos (no versionados)
+
+1. `api/data/peru-latest.osm.pbf`: `curl -L -o api/data/peru-latest.osm.pbf https://download.geofabrik.de/south-america/peru-latest.osm.pbf`
+2. `api/data/eventos.parquet`: lo produce `scripts/export_eventos.py` de `wachi-research` (datos SIDPOL, no distribuidos).
+3. `cd api && uv run python -m wachi.prepare` construye `data/network.npz` e imprime los sha256 para `api/.env`.
