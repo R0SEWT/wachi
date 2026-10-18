@@ -23,8 +23,8 @@ def engine():
 def test_mateo_shows_calm(engine):
     out = engine.route(*MATEO)
     assert out["calm"] is not None
-    assert 100 <= out["calm"]["detour_m"] <= 180
-    assert out["calm"]["exposure_reduction_pct"] >= 40
+    assert 120 <= out["calm"]["detour_m"] <= 160          # spec §11
+    assert out["calm"]["exposure_reduction_pct"] >= 45
 
 
 def test_elena_calm_does_not_cross_rebagliati(engine):
