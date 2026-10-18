@@ -1,5 +1,7 @@
 import numpy as np
 
+from tests.conftest import ll
+from wachi.geo import to_utm
 from wachi.graph import build_network, load_cache, save_cache, walk_ok
 
 
@@ -44,3 +46,18 @@ def test_cache_roundtrip(net_recinto, tmp_path):
     assert np.array_equal(back.u, net_recinto.u) and np.allclose(back.xy, net_recinto.xy)
     assert back.polys[0][0] == "amenity=hospital" and back.polys[0][2].equals(net_recinto.polys[0][2])
     assert back.stats == net_recinto.stats
+    assert np.array_equal(back.v, net_recinto.v) and np.array_equal(back.off, net_recinto.off)
+    assert np.allclose(back.length, net_recinto.length) and np.allclose(back.nxy, net_recinto.nxy)
+    assert np.array_equal(back.hw, net_recinto.hw)
+    for name in ("u", "v", "off", "hw"):
+        assert getattr(back, name).dtype == getattr(net_recinto, name).dtype
+
+
+def test_edge_xy_ab_and_reverse(net):
+    e = int(np.argmax(net.length))                  # A–B, el tramo de 1000 m
+    pts = net.edge_xy(e)
+    assert pts.shape == (2, 2)
+    a_xy, b_xy = np.array(to_utm(*ll(0, 0))), np.array(to_utm(*ll(1000, 0)))
+    assert (np.allclose(pts[0], a_xy, atol=0.01) and np.allclose(pts[1], b_xy, atol=0.01)) or \
+        (np.allclose(pts[0], b_xy, atol=0.01) and np.allclose(pts[1], a_xy, atol=0.01))
+    assert np.array_equal(net.edge_xy(e, True), pts[::-1])

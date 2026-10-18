@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import itertools
 import json
+import logging
 import re
 import time
 from collections.abc import Mapping
@@ -22,6 +23,8 @@ _EXCL_HW = re.compile(r"abandoned|bus_guideway|busway|bus_stop|construction|cycl
                       r"platform|proposed|raceway|razed")
 _SIDEWALK_KEYS = ("sidewalk", "sidewalk:both", "sidewalk:left", "sidewalk:right")
 _FOOT_OK = ("yes", "designated", "permissive")
+
+log = logging.getLogger(__name__)
 
 Way = tuple[np.ndarray, np.ndarray, np.ndarray, str]
 Poly = tuple[str, str, shapely.Geometry]
@@ -63,7 +66,8 @@ class Network:
         return c[::-1] if reverse else c
 
 
-def read_osm(pbf: Path, bbox, recinto_tags) -> tuple[list[Way], list[Poly]]:
+def read_osm(pbf: Path, bbox, recinto_tags, counts: dict | None = None) -> tuple[list[Way], list[Poly]]:
+    """Si se pasa ``counts``, se llena con ``recintos_descartados`` (geometrías que no se pudieron construir)."""
     import osmium
 
     S, W, N, E = bbox
@@ -74,6 +78,7 @@ def read_osm(pbf: Path, bbox, recinto_tags) -> tuple[list[Way], list[Poly]]:
           .with_filter(osmium.filter.KeyFilter("highway", "amenity", "landuse")))
     ways: list[Way] = []
     polys: list[Poly] = []
+    skipped = 0
 
     def inb(n):
         return n.location.valid() and S <= n.lat <= N and W <= n.lon <= E
@@ -101,13 +106,20 @@ def read_osm(pbf: Path, bbox, recinto_tags) -> tuple[list[Way], list[Poly]]:
                 continue
             try:
                 g = shapely.from_wkb(wkbf.create_multipolygon(o))
-            except Exception:  # noqa: BLE001, S112 - geometría OSM inválida: se omite el recinto
+            except (RuntimeError, ValueError, shapely.errors.GEOSException):
+                skipped += 1
                 continue
             b = g.bounds
             if b[2] < W or b[0] > E or b[3] < S or b[1] > N:
                 continue
             polys.append((kind, o.tags.get("name", ""),
                           shapely.transform(g, lambda c: np.c_[TO_UTM.transform(c[:, 0], c[:, 1])])))
+    if skipped:
+        log.warning("read_osm: %d recintos descartados por geometría inválida", skipped)
+    if not polys:
+        log.warning("read_osm: 0 recintos leídos de %s; revisar recinto_tags o la API de pyosmium", pbf)
+    if counts is not None:
+        counts["recintos_descartados"] = skipped
     return ways, polys
 
 
@@ -181,8 +193,10 @@ def load_or_build(cfg: Settings) -> Network:
     if cfg.graph_cache.exists():
         return load_cache(cfg.graph_cache)
     t0 = time.time()
-    ways, polys = read_osm(cfg.pbf_path, cfg.bbox, cfg.recinto_tags)
+    counts: dict = {}
+    ways, polys = read_osm(cfg.pbf_path, cfg.bbox, cfg.recinto_tags, counts)
     net = build_network(ways, polys)
+    net.stats.update(counts)
     net.stats["segundos_construccion"] = round(time.time() - t0)
     save_cache(net, cfg.graph_cache)
     return net
