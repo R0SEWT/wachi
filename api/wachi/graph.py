@@ -1,6 +1,7 @@
 """Red peatonal de Lima a partir de OSM (ADR 013, 014)."""
 from __future__ import annotations
 
+import hashlib
 import itertools
 import json
 import logging
@@ -25,6 +26,9 @@ _SIDEWALK_KEYS = ("sidewalk", "sidewalk:both", "sidewalk:left", "sidewalk:right"
 _FOOT_OK = ("yes", "designated", "permissive")
 
 log = logging.getLogger(__name__)
+
+# Subir cuando cambie cómo se construye la red (filtros, recintos, formato): las cachés viejas se rehacen solas.
+CACHE_VERSION = 2
 
 Way = tuple[np.ndarray, np.ndarray, np.ndarray, str]
 Poly = tuple[str, str, shapely.Geometry]
@@ -189,14 +193,40 @@ def load_cache(path: Path) -> Network:
                    json.loads(str(z["stats"])))
 
 
+def file_sha256(p: Path) -> str:
+    h = hashlib.sha256()
+    with p.open("rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def stale_reason(stats: dict, cfg: Settings) -> str | None:
+    """Por qué una caché no sirve para esta configuración, o None si sirve."""
+    if stats.get("cache_version") != CACHE_VERSION:
+        return f"cache_version {stats.get('cache_version')} ≠ {CACHE_VERSION}"
+    if cfg.pbf_sha256 and stats.get("pbf_sha256") != cfg.pbf_sha256:
+        return f"pbf_sha256 de la caché {str(stats.get('pbf_sha256'))[:12]}… ≠ fijado {cfg.pbf_sha256[:12]}…"
+    return None
+
+
 def load_or_build(cfg: Settings) -> Network:
     if cfg.graph_cache.exists():
-        return load_cache(cfg.graph_cache)
+        net = load_cache(cfg.graph_cache)
+        why = stale_reason(net.stats, cfg)
+        if why is None:
+            return net
+        log.warning("reconstruyendo %s: %s", cfg.graph_cache, why)
     t0 = time.time()
+    digest = file_sha256(cfg.pbf_path)
+    if cfg.pbf_sha256 and digest != cfg.pbf_sha256:
+        raise ValueError(f"sha256 de {cfg.pbf_path} no coincide: {digest[:12]}… ≠ {cfg.pbf_sha256[:12]}…")
     counts: dict = {}
     ways, polys = read_osm(cfg.pbf_path, cfg.bbox, cfg.recinto_tags, counts)
     net = build_network(ways, polys)
     net.stats.update(counts)
+    net.stats["pbf_sha256"] = digest
+    net.stats["cache_version"] = CACHE_VERSION
     net.stats["segundos_construccion"] = round(time.time() - t0)
     save_cache(net, cfg.graph_cache)
     return net

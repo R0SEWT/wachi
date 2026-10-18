@@ -18,6 +18,8 @@ from wachi.geo import TO_LL, TO_UTM
 from wachi.graph import Network
 from wachi.surface import Surface
 
+CSR_CACHE_MAX = 8   # cada grafo ponderado ocupa decenas de MB con la red de Lima
+
 
 @dataclass
 class Route:
@@ -88,7 +90,7 @@ class Router:
             N = len(net.nxy)
             G = csr_matrix((ww, (uu, vv)), shape=(N, N))
             G.sort_indices()
-            if len(self._csr) > 40:
+            if len(self._csr) >= CSR_CACHE_MAX:
                 self._csr.pop(next(iter(self._csr)))
             self._csr[key] = (G, ee)
             return G, ee

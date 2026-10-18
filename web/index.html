@@ -34,12 +34,6 @@
       </div>
 
       <div class="hud-actions">
-        <!-- Selector horario -->
-        <button id="btnTimeSelect" class="chip-hud hidden" aria-label="Cambiar horario">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          <span id="timeLabel">20:30 (Noche)</span>
-        </button>
-
         <!-- Modo Pantalla Discreta -->
         <button id="btnThemeToggle" class="chip-hud icon-only" aria-label="Cambiar modo de pantalla" title="Modo Pantalla Discreta">
           <svg id="iconMoon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
@@ -58,8 +52,7 @@
       <div class="deviation-content">
         <div class="deviation-icon">⚠️</div>
         <div class="deviation-text">
-          <strong>Te desviaste de la ruta tranquila</strong>
-          <span>A 65 m del camino sugerido</span>
+          <strong>Te alejaste del camino sugerido</strong>
         </div>
       </div>
       <div class="deviation-actions">
@@ -166,7 +159,6 @@
         <div id="screenCompare" class="screen-view">
           <div class="screen-header">
             <h2 class="section-title">Elige cómo caminar</h2>
-            <span class="badge-time-selected hidden" id="badgeCurrentTime">20:30 h</span>
           </div>
 
           <div class="route-cards-container">
@@ -176,10 +168,10 @@
               <div class="card-body">
                 <div class="card-header-row">
                   <span class="route-name">Tranquila</span>
-                  <span class="route-duration">22 min</span>
+                  <span class="route-duration">—</span>
                 </div>
                 <div class="card-metric-primary">
-                  <span class="delta-time">+3 min</span>
+                  <span class="delta-time"></span>
                   <span class="delta-desc">· calculando…</span>
                 </div>
                 <div class="card-metric-secondary">
@@ -195,11 +187,15 @@
               <div class="card-body">
                 <div class="card-header-row">
                   <span class="route-name">Rápida</span>
-                  <span class="route-duration">19 min</span>
+                  <span class="route-duration">—</span>
                 </div>
                 <div class="card-metric-primary alert-exposure">
-                  <span class="delta-time">Directa</span>
-                  <span class="delta-desc">· La más corta</span>
+                  <span class="delta-time"></span>
+                  <span class="delta-desc">· calculando…</span>
+                </div>
+                <div class="card-metric-secondary">
+                  <span class="icon-sparse">◌</span>
+                  <span class="sparse-desc"></span>
                 </div>
               </div>
             </div>
@@ -230,42 +226,35 @@
           </div>
 
           <div class="detail-route-summary">
-            <div class="summary-pill safe-pill">Ruta Tranquila · 38 min · 2.9 km</div>
+            <div class="summary-pill safe-pill" id="detailSummary">Calculando…</div>
           </div>
 
           <ul class="segments-list">
-            <li class="segment-item safe">
+            <li class="segment-item safe hidden" id="detailBenefit">
               <div class="segment-dot"></div>
               <div class="segment-info">
-                <strong>Av. Arequipa (cdras. 26 a 14)</strong>
-                <p>Alameda central con ciclovía, veredas anchas y comercio activo.</p>
+                <strong></strong>
+                <p></p>
               </div>
             </li>
-            <li class="segment-item avoided">
-              <div class="segment-dot avoided-dot">✕</div>
-              <div class="segment-info">
-                <strong class="avoided-title">Desvío: Se evita cruzar el corazón de Risso y calles interiores</strong>
-                <p>Historial recurrente de arrebatos de celular en la franja 19:00 - 23:00.</p>
-              </div>
-            </li>
-            <li class="segment-item sparse">
+            <li class="segment-item sparse hidden" id="detailSparse">
               <div class="segment-dot sparse-dot">◌</div>
               <div class="segment-info">
-                <strong class="sparse-title">Av. Alejandro Tirado (tramo con datos insuficientes)</strong>
-                <p>Transición residencial entre Lince y Jesús María. Camina atento en este tramo.</p>
+                <strong class="sparse-title"></strong>
+                <p>Hay pocos registros cerca de esos tramos: que no aparezcan robos no quiere decir que no ocurran.</p>
               </div>
             </li>
-            <li class="segment-item safe">
+            <li class="segment-item safe hidden" id="detailSource">
               <div class="segment-dot"></div>
               <div class="segment-info">
-                <strong>Av. Cuba (cdras. 13 a 11)</strong>
-                <p>Eje comercial de Jesús María</p>
+                <strong></strong>
+                <p></p>
               </div>
             </li>
           </ul>
 
           <div class="detail-actions">
-            <button id="btnStartFromDetail" class="btn-primary-action">Iniciar marcha tranquila</button>
+            <button id="btnStartFromDetail" class="btn-primary-action">Iniciar marcha</button>
           </div>
         </div>
 
@@ -278,29 +267,21 @@
             </div>
             <div class="turn-text">
               <div class="turn-header-row">
-                <span class="turn-dist">EN 140 METROS</span>
-                <span class="turn-time-chip">~2 min</span>
+                <span class="turn-dist">EN MARCHA</span>
               </div>
-              <strong class="turn-instruction">Continúa por Av. Arequipa</strong>
-              <span class="turn-landmark">👁 Hito: Vereda ancha y paradero cercano</span>
+              <strong class="turn-instruction">Rumbo al destino</strong>
             </div>
           </div>
 
           <div class="walking-header">
             <div class="walking-target">
               <span class="walking-label">Destino</span>
-              <strong class="walking-dest-name">Jr. Lloque Yupanqui 1120</strong>
+              <strong class="walking-dest-name"></strong>
             </div>
             <div class="walking-eta">
-              <span class="eta-mins">21 min</span>
-              <span class="eta-dist">1.3 km</span>
+              <span class="eta-mins">—</span>
+              <span class="eta-dist">—</span>
             </div>
-          </div>
-
-          <!-- Banner de estado con micro-heurística -->
-          <div class="walking-safety-banner">
-            <span class="dot-live">●</span>
-            <span>Ruta tranquila: Evita zonas solitarias</span>
           </div>
 
           <!-- Controles de marcha con Modo Bolsillo (PocketNavigator Pielot et al.) -->
@@ -338,25 +319,21 @@
           <div class="peace-of-mind-card">
             <div class="pom-header">
               <span class="pom-badge">VISTA ACOMPAÑANTE</span>
-              <span class="pom-time">Salida: 20:30</span>
+              <span class="pom-time"></span>
             </div>
-            <h3 class="pom-title">Elena va caminando por ruta tranquila</h3>
+            <h3 class="pom-title">Calculando la ruta…</h3>
             <div class="pom-meta">
               <div class="pom-row">
                 <span class="pom-label">Destino:</span>
-                <span class="pom-val">Jr. Lloque Yupanqui 1120</span>
+                <span class="pom-val" id="shareDest">—</span>
               </div>
               <div class="pom-row">
                 <span class="pom-label">Llegada estimada:</span>
-                <span class="pom-val highlight">20:52 (en 22 min)</span>
+                <span class="pom-val highlight" id="shareEta">—</span>
               </div>
             </div>
             
             <div class="pom-contact-actions">
-              <a href="tel:+51999999999" class="btn-contact btn-call">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-                <span>Llamar a Elena</span>
-              </a>
               <button id="btnShareWhatsApp" class="btn-contact btn-whatsapp">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
                 <span>Enviar por WhatsApp</span>
@@ -367,7 +344,7 @@
           <div class="share-link-box">
             <label class="share-link-label">Enlace reproducible (Deep link):</label>
             <div class="copy-field">
-              <input type="text" id="shareUrlInput" readonly value="https://wachi.pe/?origin=lince&dest=lloque&time=20:30&route=safe">
+              <input type="text" id="shareUrlInput" readonly value="">
               <button id="btnCopyLink" class="btn-copy">Copiar</button>
             </div>
           </div>
@@ -385,7 +362,7 @@
             <span class="point-icon text-success">✓</span>
             <div>
               <strong>Datos oficiales:</strong>
-              <p>Compara rutas evaluando denuncias históricas de la PNP y franjas horarias.</p>
+              <p>Compara rutas según los robos y hurtos registrados por la PNP.</p>
             </div>
           </li>
           <li>
@@ -404,22 +381,6 @@
           </li>
         </ul>
         <button id="btnAcceptOnboarding" class="btn-primary-action">Entendido, empezar</button>
-      </div>
-    </div>
-
-    <!-- Modal selector de horario -->
-    <div id="modalTimePicker" class="modal-backdrop hidden">
-      <div class="modal-card">
-        <h3 class="modal-title">Seleccionar franja horaria</h3>
-        <p class="modal-desc">El riesgo de las calles cambia según la hora del día en Lima:</p>
-        <div class="time-buckets-list">
-          <button class="time-bucket-btn" data-hour="08:00">Mañana (06:00 - 10:00)</button>
-          <button class="time-bucket-btn" data-hour="12:00">Mediodía (10:00 - 14:00)</button>
-          <button class="time-bucket-btn" data-hour="16:00">Tarde (14:00 - 18:00)</button>
-          <button class="time-bucket-btn active" data-hour="20:30">Noche (18:00 - 22:00)</button>
-          <button class="time-bucket-btn" data-hour="23:30">Madrugada (22:00 - 06:00)</button>
-        </div>
-        <button id="btnCloseTimePicker" class="btn-secondary-action">Cerrar</button>
       </div>
     </div>
 

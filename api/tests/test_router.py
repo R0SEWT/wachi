@@ -1,5 +1,5 @@
 from tests.conftest import ll
-from wachi.router import Router
+from wachi.router import CSR_CACHE_MAX, Router
 from wachi.surface import build_surface
 
 
@@ -69,9 +69,10 @@ def test_route_none_when_unreachable(net_recinto, events, cfg):
 def test_graph_cache_thread_safe(net, events, cfg):
     from concurrent.futures import ThreadPoolExecutor
     r = _router(net, events, cfg)
-    keys = [(0.5, frozenset({i})) for i in range(120)]   # más claves distintas que el tope del caché (40)
+    keys = [(0.5, frozenset({i})) for i in range(120)]   # más claves distintas que el tope del caché
     with ThreadPoolExecutor(16) as ex:
         got = list(ex.map(lambda k: r.graph(*k), keys * 3))
+    assert len(r._csr) <= CSR_CACHE_MAX
     ref = _router(net, events, cfg)
     for k, (G, ee) in zip(keys * 3, got):
         G2, ee2 = ref.graph(*k)

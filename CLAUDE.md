@@ -10,12 +10,15 @@ eventos.parquet → `surface.py` (S150 + cobertura H3) ┘
 
 ## Reglas
 - Nunca devolver coordenadas de denuncias; `api/data/` no se versiona.
-- Copy: sin "esquinas", "segura", "iluminada", "serenazgo". Categoría: "robos y hurtos".
+- Copy: sin "esquinas", "segura", "iluminada", "serenazgo", "bares", "arrebato", "franja", "celular",
+  "solitaria" (CI lo revisa con grep en `web/`). Categoría: "robos y hurtos". Todo lo que dice la
+  PWA sale de la respuesta de `/route` o es una etiqueta neutra (ADR 011).
 - Parámetros solo en `config.py` (env `WACHI_*`), nunca literales en el código.
 - Tests: `cd api && uv run pytest`; con datos reales `uv run pytest -m slow`.
 
 ## Despliegue
-`deploy/deploy.sh` (ver `deploy/README` en el script). Backend en la 4060 vía Tailscale Funnel; PWA en Netlify.
+`deploy/deploy.sh [host] [api|web|all]`; instalación y operación en la sección "Despliegue" del
+`README.md`. Backend en la 4060 vía Tailscale Funnel; PWA en Netlify.
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:6cd5cc61 -->
 ## Beads Issue Tracker

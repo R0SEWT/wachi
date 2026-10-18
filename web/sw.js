@@ -3,7 +3,7 @@
  * Versión: wachi-v1
  */
 
-const STATIC_CACHE = 'wachi-static-v2';
+const STATIC_CACHE = 'wachi-static-v3';
 const TILE_CACHE = 'wachi-tiles-v2';
 const MAX_CACHED_TILES = 150;
 
