@@ -44,7 +44,8 @@ class Router:
         pos = (k + 0.5) * net.length[rep] / n[rep]
         pts = shapely.line_interpolate_point(lines[rep], pos)
         vals = surf.at(shapely.get_x(pts), shapely.get_y(pts))["S150"]
-        self.p75 = max(float(np.percentile(vals, 75)), 1e-9)
+        p75 = float(np.percentile(vals, 75))
+        self.p75 = p75 if p75 > 0 else 1.0   # sin exposición en el p75: r̄ = S150 medio, costos finitos
         self.rbar = np.bincount(rep, vals, E) / n / self.p75
         # recintos: polígono dominante de cada arista (≥ 50 % de sus muestras dentro)
         self.shrunk = [g.buffer(-cfg.recinto_shrink_m) for _, _, g in net.polys]

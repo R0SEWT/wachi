@@ -56,8 +56,11 @@ def test_recinto_blocks_bypass(net_recinto, events, cfg):
     assert len(r.route(c, b, beta=0.0, blocked=r.blocked_for(r.allowed_polys(c, b))).edges) == 1
 
 
-def test_route_none_when_unreachable(net, events, cfg):
-    r = _router(net, events, cfg)
+def test_route_none_when_unreachable(net_recinto, events, cfg):
+    r = _router(net_recinto, events, cfg)
     a, _ = r.snap(*ll(0, 0)[::-1])
+    c, _ = r.snap(*ll(500, 200)[::-1])
     assert r.route(a, a, beta=0.0, blocked=None).length_m == 0
-    assert r.route(a, 3, beta=0.0, blocked=frozenset()) is not None
+    assert r.route(a, c, beta=0.0, blocked=frozenset()) is not None
+    # `blocked` son índices de recinto: con el recinto 0 bloqueado, C queda aislado (A–C y C–B caen dentro)
+    assert r.route(a, c, beta=0.0, blocked=frozenset({0})) is None
