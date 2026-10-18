@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import itertools
 import math
+import threading
 from dataclasses import dataclass
 
 import numpy as np
@@ -64,30 +65,33 @@ class Router:
             self.edge_poly[inside.e.values[ok]] = inside.p.values[ok]
         self.node_tree = cKDTree(net.nxy)
         self._csr: dict = {}
+        self._lock = threading.Lock()
 
     def graph(self, beta: float, blocked: frozenset | None):
         key = (beta, blocked)
-        if key in self._csr:
-            return self._csr[key]
-        net = self.net
-        w = net.length * (1 + beta * self.rbar) if beta else net.length.copy()
-        w = np.maximum(w, 1e-3)
-        mask = np.ones(len(w), bool)
-        if blocked:
-            mask &= ~np.isin(self.edge_poly, list(blocked))
-        e = np.flatnonzero(mask)
-        uu, vv, ww, ee = np.r_[net.u[e], net.v[e]], np.r_[net.v[e], net.u[e]], np.r_[w[e], w[e]], np.r_[e, e]
-        o = np.lexsort((ww, vv, uu))
-        uu, vv, ww, ee = uu[o], vv[o], ww[o], ee[o]
-        first = np.r_[True, (uu[1:] != uu[:-1]) | (vv[1:] != vv[:-1])]
-        uu, vv, ww, ee = uu[first], vv[first], ww[first], ee[first]
-        N = len(net.nxy)
-        G = csr_matrix((ww, (uu, vv)), shape=(N, N))
-        G.sort_indices()
-        if len(self._csr) > 40:
-            self._csr.pop(next(iter(self._csr)))
-        self._csr[key] = (G, ee)
-        return self._csr[key]
+        with self._lock:   # la API llama desde varios hilos: búsqueda, construcción y expulsión van juntas
+            hit = self._csr.get(key)
+            if hit is not None:
+                return hit
+            net = self.net
+            w = net.length * (1 + beta * self.rbar) if beta else net.length.copy()
+            w = np.maximum(w, 1e-3)
+            mask = np.ones(len(w), bool)
+            if blocked:
+                mask &= ~np.isin(self.edge_poly, list(blocked))
+            e = np.flatnonzero(mask)
+            uu, vv, ww, ee = np.r_[net.u[e], net.v[e]], np.r_[net.v[e], net.u[e]], np.r_[w[e], w[e]], np.r_[e, e]
+            o = np.lexsort((ww, vv, uu))
+            uu, vv, ww, ee = uu[o], vv[o], ww[o], ee[o]
+            first = np.r_[True, (uu[1:] != uu[:-1]) | (vv[1:] != vv[:-1])]
+            uu, vv, ww, ee = uu[first], vv[first], ww[first], ee[first]
+            N = len(net.nxy)
+            G = csr_matrix((ww, (uu, vv)), shape=(N, N))
+            G.sort_indices()
+            if len(self._csr) > 40:
+                self._csr.pop(next(iter(self._csr)))
+            self._csr[key] = (G, ee)
+            return G, ee
 
     def blocked_for(self, allowed: set[int]) -> frozenset:
         return frozenset(set(range(len(self.net.polys))) - allowed)

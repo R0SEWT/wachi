@@ -64,3 +64,15 @@ def test_route_none_when_unreachable(net_recinto, events, cfg):
     assert r.route(a, c, beta=0.0, blocked=frozenset()) is not None
     # `blocked` son índices de recinto: con el recinto 0 bloqueado, C queda aislado (A–C y C–B caen dentro)
     assert r.route(a, c, beta=0.0, blocked=frozenset({0})) is None
+
+
+def test_graph_cache_thread_safe(net, events, cfg):
+    from concurrent.futures import ThreadPoolExecutor
+    r = _router(net, events, cfg)
+    keys = [(0.5, frozenset({i})) for i in range(120)]   # más claves distintas que el tope del caché (40)
+    with ThreadPoolExecutor(16) as ex:
+        got = list(ex.map(lambda k: r.graph(*k), keys * 3))
+    ref = _router(net, events, cfg)
+    for k, (G, ee) in zip(keys * 3, got):
+        G2, ee2 = ref.graph(*k)
+        assert (G != G2).nnz == 0 and (ee == ee2).all()
