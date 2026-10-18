@@ -4,6 +4,7 @@ import shapely
 
 from wachi.config import Settings
 from wachi.engine import load_engine
+from wachi.geo import TO_UTM
 
 pytestmark = pytest.mark.slow
 
@@ -30,11 +31,15 @@ def test_elena_calm_does_not_cross_rebagliati(engine):
     out = engine.route(*ELENA)
     reb = [g for k, n, g in engine.router.net.polys if "Rebagliati" in n]
     assert reb, "el pbf debe traer el hospital Rebagliati"
-    if out["calm"] is None:
-        return
-    from wachi.geo import TO_UTM
-    xy = [TO_UTM.transform(lon, lat) for lat, lon in out["calm"]["geometry"]]
-    inside = shapely.length(shapely.intersection(shapely.linestrings(xy), shapely.union_all(reb)))
+    assert out["calm"] is not None, "Elena debería tener Tranquila (+264 m en 2026-10-18)"
+    reb_geom = shapely.union_all(reb)
+
+    def line(route):
+        return shapely.linestrings([TO_UTM.transform(lon, lat) for lat, lon in route["geometry"]])
+
+    dist = shapely.distance(reb_geom, line(out["fast"]))
+    assert dist < 300, f"el caso Elena debe seguir anclado al hospital; la rápida pasa a {dist:.0f} m"
+    inside = shapely.length(shapely.intersection(line(out["calm"]), reb_geom))
     assert inside < 20
 
 
