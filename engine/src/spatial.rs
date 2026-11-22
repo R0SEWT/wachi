@@ -1,109 +1,103 @@
-//! Rejilla uniforme de puntos: conteo dentro de un radio y vecino más cercano, exactos.
+//! Rejilla dispersa de puntos: conteo dentro de un radio y vecino más cercano, exactos.
+//!
+//! Solo guarda las celdas que tienen puntos (tabla hash), así que la extensión de los datos no
+//! importa: un evento con coordenadas basura (0, 0) no infla la memoria, igual que con el
+//! `cKDTree` de Python.
+
+use std::collections::HashMap;
 
 pub struct Grid {
-    x0: f64,
-    y0: f64,
     cell: f64,
-    nx: usize,
-    ny: usize,
-    /// inicio de cada celda en `pts` (CSR), len nx·ny+1
-    start: Vec<u32>,
+    /// celda (cx, cy) → rango [inicio, fin) en `pts`
+    cells: HashMap<(i64, i64), (u32, u32)>,
     pts: Vec<[f64; 2]>,
     ids: Vec<u32>,
+    /// límites de las celdas ocupadas
+    bounds: (i64, i64, i64, i64),
 }
 
 impl Grid {
     pub fn new(points: &[[f64; 2]], cell: f64) -> Grid {
         assert!(cell > 0.0);
-        if points.is_empty() {
-            return Grid {
-                x0: 0.0,
-                y0: 0.0,
-                cell,
-                nx: 1,
-                ny: 1,
-                start: vec![0, 0],
-                pts: vec![],
-                ids: vec![],
-            };
-        }
-        let (mut x0, mut y0, mut x1, mut y1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
-        for p in points {
-            x0 = x0.min(p[0]);
-            y0 = y0.min(p[1]);
-            x1 = x1.max(p[0]);
-            y1 = y1.max(p[1]);
-        }
-        let nx = ((x1 - x0) / cell) as usize + 1;
-        let ny = ((y1 - y0) / cell) as usize + 1;
-        let key = |p: &[f64; 2]| {
-            let cx = ((p[0] - x0) / cell) as usize;
-            let cy = ((p[1] - y0) / cell) as usize;
-            cy.min(ny - 1) * nx + cx.min(nx - 1)
-        };
-        let mut count = vec![0u32; nx * ny + 1];
-        for p in points {
-            count[key(p) + 1] += 1;
-        }
-        for i in 1..count.len() {
-            count[i] += count[i - 1];
-        }
-        let start = count.clone();
-        let mut fill = count;
-        let mut pts = vec![[0.0; 2]; points.len()];
-        let mut ids = vec![0u32; points.len()];
-        for (i, p) in points.iter().enumerate() {
-            let k = key(p);
-            let at = fill[k] as usize;
-            pts[at] = *p;
-            ids[at] = i as u32;
-            fill[k] += 1;
+        let key = |p: &[f64; 2]| ((p[0] / cell).floor() as i64, (p[1] / cell).floor() as i64);
+        let mut order: Vec<u32> = (0..points.len() as u32).collect();
+        order.sort_by_key(|&i| key(&points[i as usize]));
+        let mut cells = HashMap::new();
+        let mut pts = Vec::with_capacity(points.len());
+        let mut ids = Vec::with_capacity(points.len());
+        let mut bounds = (i64::MAX, i64::MAX, i64::MIN, i64::MIN);
+        let mut i = 0;
+        while i < order.len() {
+            let k = key(&points[order[i] as usize]);
+            let start = i;
+            while i < order.len() && key(&points[order[i] as usize]) == k {
+                pts.push(points[order[i] as usize]);
+                ids.push(order[i]);
+                i += 1;
+            }
+            cells.insert(k, (start as u32, i as u32));
+            bounds = (
+                bounds.0.min(k.0),
+                bounds.1.min(k.1),
+                bounds.2.max(k.0),
+                bounds.3.max(k.1),
+            );
         }
         Grid {
-            x0,
-            y0,
             cell,
-            nx,
-            ny,
-            start,
+            cells,
             pts,
             ids,
+            bounds,
         }
     }
 
-    fn range(&self, lo: f64, hi: f64, origin: f64, n: usize) -> Option<(usize, usize)> {
-        let a = ((lo - origin) / self.cell).floor();
-        let b = ((hi - origin) / self.cell).floor();
-        if b < 0.0 || a > (n - 1) as f64 {
-            return None;
+    fn cell_range(&self, lo: f64, hi: f64) -> (i64, i64) {
+        (
+            (lo / self.cell).floor() as i64,
+            (hi / self.cell).floor() as i64,
+        )
+    }
+
+    fn for_cells_in(&self, x: f64, y: f64, r: f64, mut f: impl FnMut(usize)) {
+        let (cx0, cx1) = self.cell_range(x - r, x + r);
+        let (cy0, cy1) = self.cell_range(y - r, y + r);
+        let (cx0, cx1) = (cx0.max(self.bounds.0), cx1.min(self.bounds.2));
+        let (cy0, cy1) = (cy0.max(self.bounds.1), cy1.min(self.bounds.3));
+        for cx in cx0..=cx1 {
+            for cy in cy0..=cy1 {
+                if let Some(&(s, e)) = self.cells.get(&(cx, cy)) {
+                    for i in s as usize..e as usize {
+                        f(i);
+                    }
+                }
+            }
         }
-        Some((a.max(0.0) as usize, (b as usize).min(n - 1)))
     }
 
     /// Cantidad de puntos a distancia ≤ r (como `cKDTree.query_ball_point(..., return_length=True)`).
     pub fn count_within(&self, x: f64, y: f64, r: f64) -> u32 {
         let r2 = r * r;
-        let (Some((cx0, cx1)), Some((cy0, cy1))) = (
-            self.range(x - r, x + r, self.x0, self.nx),
-            self.range(y - r, y + r, self.y0, self.ny),
-        ) else {
-            return 0;
-        };
         let mut n = 0;
-        for cy in cy0..=cy1 {
-            let row = cy * self.nx;
-            let (s, e) = (
-                self.start[row + cx0] as usize,
-                self.start[row + cx1 + 1] as usize,
-            );
-            for p in &self.pts[s..e] {
-                let (dx, dy) = (p[0] - x, p[1] - y);
-                if dx * dx + dy * dy <= r2 {
-                    n += 1;
-                }
+        self.for_cells_in(x, y, r, |i| {
+            let p = self.pts[i];
+            if (p[0] - x).powi(2) + (p[1] - y).powi(2) <= r2 {
+                n += 1;
             }
-        }
+        });
         n
+    }
+
+    /// Índices originales de los puntos a distancia ≤ r.
+    pub fn within_ids(&self, x: f64, y: f64, r: f64, out: &mut Vec<u32>) {
+        out.clear();
+        let r2 = r * r;
+        self.for_cells_in(x, y, r, |i| {
+            let p = self.pts[i];
+            if (p[0] - x).powi(2) + (p[1] - y).powi(2) <= r2 {
+                out.push(self.ids[i]);
+            }
+        });
     }
 
     /// Índice original y distancia del punto más cercano (empate: el de menor índice).
@@ -111,40 +105,47 @@ impl Grid {
         if self.pts.is_empty() {
             return None;
         }
-        // celda de la consulta (puede estar fuera de la rejilla) y anillos crecientes
-        let qx = ((x - self.x0) / self.cell).floor() as i64;
-        let qy = ((y - self.y0) / self.cell).floor() as i64;
-        let (nx, ny) = (self.nx as i64, self.ny as i64);
+        let qx = (x / self.cell).floor() as i64;
+        let qy = (y / self.cell).floor() as i64;
+        // anillo más lejano que puede tener celdas ocupadas
+        let (bx0, by0, bx1, by1) = self.bounds;
+        let max_ring = (qx - bx0)
+            .abs()
+            .max((bx1 - qx).abs())
+            .max((qy - by0).abs())
+            .max((by1 - qy).abs());
         let mut best: Option<(f64, u32)> = None;
-        let max_ring = (nx.max(ny) + qx.abs().max(qy.abs())) + 1;
+        let mut visit = |cx: i64, cy: i64, best: &mut Option<(f64, u32)>| {
+            if let Some(&(s, e)) = self.cells.get(&(cx, cy)) {
+                for i in s as usize..e as usize {
+                    let p = self.pts[i];
+                    let d2 = (p[0] - x).powi(2) + (p[1] - y).powi(2);
+                    let id = self.ids[i];
+                    if best.is_none_or(|(bd, bi)| d2 < bd || (d2 == bd && id < bi)) {
+                        *best = Some((d2, id));
+                    }
+                }
+            }
+        };
         for ring in 0..=max_ring {
-            // la distancia mínima a cualquier celda del anillo k es ≥ (k−1)·cell
+            // toda celda del anillo k está a ≥ (k−1)·cell de la consulta
             if let Some((d2, _)) = best {
                 let lim = (ring as f64 - 1.0).max(0.0) * self.cell;
                 if lim * lim > d2 {
                     break;
                 }
             }
-            for cy in (qy - ring)..=(qy + ring) {
-                if cy < 0 || cy >= ny {
-                    continue;
-                }
-                let edge_row = cy == qy - ring || cy == qy + ring;
-                let mut cx = qx - ring;
-                while cx <= qx + ring {
-                    if cx >= 0 && cx < nx {
-                        let k = (cy * nx + cx) as usize;
-                        for i in self.start[k] as usize..self.start[k + 1] as usize {
-                            let p = self.pts[i];
-                            let d2 = (p[0] - x).powi(2) + (p[1] - y).powi(2);
-                            let id = self.ids[i];
-                            if best.is_none_or(|(bd, bi)| d2 < bd || (d2 == bd && id < bi)) {
-                                best = Some((d2, id));
-                            }
-                        }
-                    }
-                    cx += if edge_row || ring == 0 { 1 } else { 2 * ring };
-                }
+            if ring == 0 {
+                visit(qx, qy, &mut best);
+                continue;
+            }
+            for cx in (qx - ring)..=(qx + ring) {
+                visit(cx, qy - ring, &mut best);
+                visit(cx, qy + ring, &mut best);
+            }
+            for cy in (qy - ring + 1)..=(qy + ring - 1) {
+                visit(qx - ring, cy, &mut best);
+                visit(qx + ring, cy, &mut best);
             }
         }
         best.map(|(d2, i)| (i as usize, d2.sqrt()))
@@ -185,6 +186,24 @@ mod tests {
             let (gi, gd) = g.nearest(x, y).unwrap();
             assert_eq!(gi, bi);
             assert!((gd - bd).abs() < 1e-9);
+            let mut ids = Vec::new();
+            g.within_ids(x, y, 150.0, &mut ids);
+            assert_eq!(ids.len(), bf);
         }
+    }
+
+    #[test]
+    fn atipicos_lejanos_no_inflan_la_memoria() {
+        // Lima (UTM) + un punto en (0, 0) y otro con lat/lon invertidas: miles de km de extensión
+        let mut pts: Vec<[f64; 2]> = (0..1000)
+            .map(|i| [279_000.0 + i as f64, 8_663_000.0])
+            .collect();
+        pts.push([0.0, 0.0]);
+        pts.push([-5_000_000.0, 12_000_000.0]);
+        let g = Grid::new(&pts, 150.0);
+        assert_eq!(g.count_within(279_500.0, 8_663_000.0, 150.0), 301);
+        assert_eq!(g.count_within(0.0, 0.0, 1.0), 1);
+        assert_eq!(g.nearest(279_000.4, 8_663_010.0).unwrap().0, 0);
+        assert_eq!(g.nearest(10.0, 10.0).unwrap().0, 1000);
     }
 }
