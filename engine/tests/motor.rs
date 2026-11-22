@@ -630,3 +630,155 @@ fn engine_errores_de_ruta() {
         Some(RouteError::SinViaPeatonalCerca("destination"))
     );
 }
+
+// ---------------- propiedad: A* = Dijkstra ----------------
+
+fn lcg(s: &mut u64) -> f64 {
+    *s = s
+        .wrapping_mul(6364136223846793005)
+        .wrapping_add(1442695040888963407);
+    (*s >> 11) as f64 / (1u64 << 53) as f64
+}
+
+/// Grilla 40×40 (~60 m) con nodos movidos, diagonales al azar, aristas curvas (un vértice
+/// intermedio desplazado), eventos al azar y un recinto. Para 400 pares y tres β, A* y Dijkstra
+/// deben dar el mismo costo óptimo (el camino puede variar solo si hay empates exactos).
+#[test]
+fn astar_da_el_mismo_optimo_que_dijkstra() {
+    let mut s = 12345u64;
+    let n = 40i64;
+    let id = |i: i64, j: i64| 1000 + i * n + j;
+    let mut pos = std::collections::HashMap::new();
+    for i in 0..n {
+        for j in 0..n {
+            pos.insert(
+                id(i, j),
+                ll(
+                    i as f64 * 60.0 + (lcg(&mut s) - 0.5) * 30.0,
+                    j as f64 * 60.0 + (lcg(&mut s) - 0.5) * 30.0,
+                ),
+            );
+        }
+    }
+    let mut ws = Vec::new();
+    let mut extra = 10_000_000i64;
+    let mut edge = |a: i64, b: i64, s: &mut u64| {
+        let (pa, pb) = (pos[&a], pos[&b]);
+        let mut ids = vec![a];
+        let mut lonlat = vec![pa];
+        if lcg(s) < 0.4 {
+            // vértice intermedio desplazado: la arista mide más que la recta
+            extra += 1;
+            ids.push(extra);
+            lonlat.push((
+                (pa.0 + pb.0) / 2.0 + (lcg(s) - 0.5) * 2e-4,
+                (pa.1 + pb.1) / 2.0 + (lcg(s) - 0.5) * 2e-4,
+            ));
+        }
+        ids.push(b);
+        lonlat.push(pb);
+        Way {
+            ids,
+            lonlat,
+            highway: "residential".into(),
+        }
+    };
+    for i in 0..n {
+        for j in 0..n {
+            if i + 1 < n && lcg(&mut s) < 0.9 {
+                ws.push(edge(id(i, j), id(i + 1, j), &mut s));
+            }
+            if j + 1 < n && lcg(&mut s) < 0.9 {
+                ws.push(edge(id(i, j), id(i, j + 1), &mut s));
+            }
+            if i + 1 < n && j + 1 < n && lcg(&mut s) < 0.15 {
+                ws.push(edge(id(i, j), id(i + 1, j + 1), &mut s));
+            }
+        }
+    }
+    let (x0, y0) = to_utm(LON0, LAT0);
+    let c = |dx: f64, dy: f64| {
+        let (lo, la) = to_ll(x0 + dx, y0 + dy);
+        geo::Coord { x: lo, y: la }
+    };
+    let rec = RecintoLL {
+        kind: "amenity=hospital".into(),
+        name: "Recinto".into(),
+        geom: geo::MultiPolygon(vec![geo::Polygon::new(
+            geo::LineString(vec![
+                c(700.0, 700.0),
+                c(1300.0, 700.0),
+                c(1300.0, 1100.0),
+                c(700.0, 1100.0),
+                c(700.0, 700.0),
+            ]),
+            vec![],
+        )]),
+    };
+    let net = build_network(OsmData {
+        ways: ws,
+        recintos: vec![rec],
+        recintos_descartados: 0,
+    });
+    let k = 3000;
+    let mut ev = Events {
+        lat: vec![],
+        lon: vec![],
+        day: vec![],
+    };
+    for _ in 0..k {
+        // la mitad en tres focos, el resto disperso
+        let (dx, dy) = if lcg(&mut s) < 0.5 {
+            let f = [(500.0, 500.0), (1500.0, 900.0), (900.0, 1800.0)]
+                [(lcg(&mut s) * 3.0) as usize % 3];
+            (
+                f.0 + (lcg(&mut s) - 0.5) * 300.0,
+                f.1 + (lcg(&mut s) - 0.5) * 300.0,
+            )
+        } else {
+            (lcg(&mut s) * 2400.0, lcg(&mut s) * 2400.0)
+        };
+        let (lo, la) = ll(dx, dy);
+        ev.lat.push(la);
+        ev.lon.push(lo);
+        ev.day.push(19_000);
+    }
+    let cf = cfg(&tmp());
+    let r = Router::new(net, Surface::build(&ev, &cf).unwrap(), cf.clone());
+    assert!(r.edge_poly.contains(&0), "el recinto debe cubrir aristas");
+    let nn = r.net.n_nodes() as f64;
+    let mut iguales = 0;
+    for q in 0..400 {
+        let a = (lcg(&mut s) * nn) as u32;
+        let b = (lcg(&mut s) * nn) as u32;
+        let allowed = if q % 2 == 0 {
+            Some(r.allowed_polys(&[a, b]))
+        } else {
+            None
+        };
+        for beta in [0.0, 0.5, 2.0] {
+            let x = r.route(a, b, beta, allowed.as_ref());
+            let y = r.route_dijkstra(a, b, beta, allowed.as_ref());
+            match (x, y) {
+                (None, None) => {}
+                (Some(x), Some(y)) => {
+                    let (cx, cy) = (r.cost(&x, beta), r.cost(&y, beta));
+                    assert!(
+                        (cx - cy).abs() <= 1e-9 * cy.max(1.0),
+                        "par {a}→{b} β={beta}: A* {cx} vs Dijkstra {cy}"
+                    );
+                    iguales += (x.edges == y.edges) as usize;
+                }
+                (x, y) => panic!(
+                    "par {a}→{b} β={beta}: A* {:?} vs Dijkstra {:?}",
+                    x.is_some(),
+                    y.is_some()
+                ),
+            }
+        }
+    }
+    assert!(
+        iguales >= 1150,
+        "mismo camino en {iguales} de 1200 búsquedas"
+    );
+}

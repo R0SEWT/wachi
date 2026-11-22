@@ -12,6 +12,7 @@ RAIZ = Path(__file__).resolve().parents[2]
 
 
 def main(net_path: str, out: str, n_rand: int = 450, seed: int = 20261122) -> None:
+    """n_rand y seed opcionales por línea de comandos: pares.py RED SALIDA [N] [SEMILLA]."""
     pares = []
     for p in yaml.safe_load((RAIZ / "docs/experiments/od_pairs.yaml").read_text())["pares"]:
         pares.append({"id": p["id"], "origin": p["origen"], "destination": p["destino"]})
@@ -36,4 +37,4 @@ def main(net_path: str, out: str, n_rand: int = 450, seed: int = 20261122) -> No
 
 
 if __name__ == "__main__":
-    main(sys.argv[1], sys.argv[2])
+    main(sys.argv[1], sys.argv[2], *(int(a) for a in sys.argv[3:5]))

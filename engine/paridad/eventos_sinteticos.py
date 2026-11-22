@@ -37,4 +37,4 @@ def main(net_path: str, out: str, n: int = 250_000, seed: int = 7) -> None:
 
 
 if __name__ == "__main__":
-    main(sys.argv[1], sys.argv[2])
+    main(sys.argv[1], sys.argv[2], *(int(a) for a in sys.argv[3:5]))

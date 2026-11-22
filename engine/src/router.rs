@@ -309,6 +309,34 @@ impl Router {
         beta: f64,
         allowed: Option<&HashSet<i32>>,
     ) -> Option<Route> {
+        self.search(src, dst, beta, allowed, true)
+    }
+
+    /// Dijkstra puro (sin heurística). Solo para comprobar que A* da el mismo óptimo.
+    #[doc(hidden)]
+    pub fn route_dijkstra(
+        &self,
+        src: u32,
+        dst: u32,
+        beta: f64,
+        allowed: Option<&HashSet<i32>>,
+    ) -> Option<Route> {
+        self.search(src, dst, beta, allowed, false)
+    }
+
+    /// Costo de una ruta con el β dado (suma secuencial de los pesos de sus aristas).
+    pub fn cost(&self, r: &Route, beta: f64) -> f64 {
+        r.edges.iter().map(|&e| self.weight(e as usize, beta)).sum()
+    }
+
+    fn search(
+        &self,
+        src: u32,
+        dst: u32,
+        beta: f64,
+        allowed: Option<&HashSet<i32>>,
+        astar: bool,
+    ) -> Option<Route> {
         let nxy = &self.net.nxy;
         if src == dst {
             let p = nxy[src as usize];
@@ -326,6 +354,9 @@ impl Router {
         let t = nxy[dst as usize];
         // margen para que el redondeo de la recta nunca supere al largo de la arista
         let h = |n: u32| {
+            if !astar {
+                return 0.0;
+            }
             let p = nxy[n as usize];
             ((p[0] - t[0]).powi(2) + (p[1] - t[1]).powi(2)).sqrt() * (1.0 - 1e-9)
         };
