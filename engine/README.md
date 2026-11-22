@@ -23,6 +23,10 @@ eventos sintéticos (ver [Límites](#límites)), 504 pares origen-destino (los 5
 | HTTP, 8 conexiones (ruta de 2,7 km) | 70 rps · p99 157 ms | **4.742 rps · p99 3,1 ms** |
 | HTTP, 16 conexiones | 124 rps · **48 % de 503** | **5.488 rps · 0 % de 503** |
 
+Con `WACHI_BETAS=[0.5,1,2,4]` el p95 de Python pasa de 97 ms a **1.220 ms** (su caché de 8
+grafos ponderados por (β, recintos bloqueados) se vacía y se reconstruye); el de Rust, de 3,4 a
+14 ms. No cambia la decisión del β (ADR 014), pero el costo ya no sería un argumento.
+
 Sobre los 503: `--limit-concurrency 16` de uvicorn cuenta *conexiones abiertas*, así que con 16
 clientes con keep-alive ya está en el tope y rechaza casi todo. En Rust el límite es de
 *peticiones en curso* (16); la 17.ª simultánea recibe 503 en vez de encolarse.
@@ -33,9 +37,13 @@ clientes con keep-alive ya está en el tope y rechaza casi todo. En Rust el lím
 |---|---|
 | Red construida (vías, nodos, aristas, km, recintos por tipo) | idéntica |
 | Proyección UTM, 20.000 puntos con 7 decimales, ida y vuelta | **bit a bit** igual a pyproj |
-| `/route` sobre 504 pares (motor directo) | **504/504 idénticas** |
+| `/route`, 504 pares, 250.000 eventos | **504/504 idénticas** |
+| `/route`, 5.004 pares (otra semilla) | **5.004/5.004 idénticas** |
+| `/route`, 504 pares, 20.000 eventos (68 rutas con tramos de pocos datos) | **504/504 idénticas** |
+| `/route`, 504 pares, `WACHI_BETAS=[0.5,1,2,4]` (varias candidatas) | **504/504 idénticas** |
 | HTTP: `/health`, 504 rutas, 9 cuerpos raros, 404 | **517/517 idénticas byte a byte** |
-| Suite de `api/tests` portada (`tests/motor.rs`) + unitarios | 32 tests en verde |
+| A* frente a Dijkstra puro: 1.200 búsquedas en grilla con recinto y β ∈ {0; 0,5; 2} | mismo óptimo |
+| Suite de `api/tests` portada (`tests/motor.rs`) + unitarios | 33 tests en verde |
 
 Para lograrlo se replicó la semántica exacta de lo que usa Python:
 
@@ -73,13 +81,21 @@ cd ../api                                   # mismo directorio de trabajo que la
 ```
 
 Configuración: las mismas variables `WACHI_*` de `api/wachi/config.py` (y `api/.env`), salvo la
-caché: `WACHI_GRAPH_CACHE_RS` (por defecto `data/network.wachi`). Logs con `RUST_LOG`.
+caché: `WACHI_GRAPH_CACHE_RS` (por defecto `data/network.wachi`). Logs a stderr con `RUST_LOG`;
+una línea por petición (`POST /route 200 2.0ms`), nunca el cuerpo ni la IP.
 
 Tests: `cargo test` (con `WACHI_PROJ_REF=archivo.bin` compara además una muestra de pyproj).
 
 ## Reproducir la paridad
 
-Desde `api/`, con el pbf y `data/network.npz` de Python:
+Con los datos reales del host (pbf + `eventos.parquet` de SIDPOL), un solo comando que no saca
+nada de la máquina ni toca los servicios:
+
+```bash
+cd ~/wachi && engine/paridad/validar_en_host.sh      # 51 pares del experimento + 950 aleatorios
+```
+
+Paso a paso, desde `api/`, con el pbf y `data/network.npz` de Python:
 
 ```bash
 uv run python ../engine/paridad/eventos_sinteticos.py data/network.npz data/eventos.parquet  # solo si no hay datos reales

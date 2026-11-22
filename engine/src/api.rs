@@ -88,6 +88,21 @@ async fn route(State(st): State<AppState>, body: Bytes) -> Response {
     }
 }
 
+/// Una línea por petición: método, ruta, código y latencia. Nunca el cuerpo (trae el origen y el
+/// destino de la persona) ni la IP.
+async fn access_log(req: axum::extract::Request, next: axum::middleware::Next) -> Response {
+    let (method, path) = (req.method().clone(), req.uri().path().to_owned());
+    let t = std::time::Instant::now();
+    let resp = next.run(req).await;
+    tracing::info!(
+        target: "acceso",
+        "{method} {path} {} {:.1}ms",
+        resp.status().as_u16(),
+        t.elapsed().as_secs_f64() * 1000.0
+    );
+    resp
+}
+
 async fn fallback() -> Response {
     err(StatusCode::NOT_FOUND, json!({"detail": "Not Found"}))
 }
@@ -119,6 +134,7 @@ pub fn app(st: AppState, cfg: &Settings, max_concurrency: usize) -> AxRouter {
                 .concurrency_limit(max_concurrency),
         )
         .layer(cors)
+        .layer(axum::middleware::from_fn(access_log))
 }
 
 #[allow(dead_code)]

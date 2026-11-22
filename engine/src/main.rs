@@ -30,6 +30,7 @@ fn main() -> Result<()> {
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
         )
         .with_target(false)
+        .with_writer(std::io::stderr) // stdout queda para lo que imprimen prepare y batch
         .init();
     let args: Vec<String> = std::env::args().collect();
     let cfg = Settings::from_env()?;
