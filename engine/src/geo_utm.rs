@@ -33,8 +33,9 @@ fn c_cos(x: f64) -> f64 {
     unsafe { cos(x) }
 }
 
-const M_PI: f64 = 3.141_592_653_589_793_238_46;
-const M_TWOPI: f64 = 6.283_185_307_179_586_476_93;
+// M_PI y M_TWOPI de proj_internal.h redondean a los mismos f64 que PI y TAU.
+const M_PI: f64 = std::f64::consts::PI;
+const M_TWOPI: f64 = std::f64::consts::TAU;
 const DEG_TO_RAD: f64 = 0.017_453_292_519_943_296;
 const ORDER: usize = 6;
 
@@ -132,7 +133,13 @@ fn auxlat_convert(zeta: f64, f: &[f64; ORDER]) -> f64 {
 }
 
 /// clenS de tmerc.cpp (suma de Clenshaw compleja). Devuelve (R, I).
-fn clen_s(a: &[f64; ORDER], sin_arg_r: f64, cos_arg_r: f64, sinh_arg_i: f64, cosh_arg_i: f64) -> (f64, f64) {
+fn clen_s(
+    a: &[f64; ORDER],
+    sin_arg_r: f64,
+    cos_arg_r: f64,
+    sinh_arg_i: f64,
+    cosh_arg_i: f64,
+) -> (f64, f64) {
     let mut r = 2.0 * cos_arg_r * cosh_arg_i;
     let mut i = -2.0 * sin_arg_r * sinh_arg_i;
     let mut p = ORDER;
@@ -288,35 +295,67 @@ mod tests {
 
     #[test]
     fn ida_y_vuelta() {
-        for &(lon, lat) in &[(-77.03, -12.08), (-76.85, -11.87), (-77.13, -12.28), (-75.0, -10.0)] {
+        for &(lon, lat) in &[
+            (-77.03, -12.08),
+            (-76.85, -11.87),
+            (-77.13, -12.28),
+            (-75.0, -10.0),
+        ] {
             let (x, y) = to_utm(lon, lat);
             let (lo, la) = to_ll(x, y);
-            assert!((lo - lon).abs() < 1e-11 && (la - lat).abs() < 1e-11, "{lon},{lat} → {lo},{la}");
+            assert!(
+                (lo - lon).abs() < 1e-11 && (la - lat).abs() < 1e-11,
+                "{lon},{lat} → {lo},{la}"
+            );
         }
     }
 
     #[test]
     fn bit_a_bit_con_pyproj() {
         // pyproj 3.8.0 / PROJ 9.8.1 (repr de Python, así que son los floats exactos)
-        assert_eq!(to_utm(-77.03, -12.08), (279038.95867153915, 8663780.658875449));
-        assert_eq!(to_ll(279038.958671539, 8663780.658875449), (-77.03, -12.079999999999993));
-        assert_eq!(to_ll(280000.5, 8665000.25), (-77.02108736473073, -12.0690420500559));
-        assert_eq!(to_ll(270000.0, 8650000.0), (-77.11398588661865, -12.203918923471013));
+        assert_eq!(
+            to_utm(-77.03, -12.08),
+            (279038.95867153915, 8663780.658875449)
+        );
+        assert_eq!(
+            to_ll(279038.958671539, 8663780.658875449),
+            (-77.03, -12.079999999999993)
+        );
+        assert_eq!(
+            to_ll(280000.5, 8665000.25),
+            (-77.02108736473073, -12.0690420500559)
+        );
+        assert_eq!(
+            to_ll(270000.0, 8650000.0),
+            (-77.11398588661865, -12.203918923471013)
+        );
     }
 
     /// Muestra grande contra pyproj: `WACHI_PROJ_REF=archivo.bin cargo test` (6 f64 por punto:
     /// lon, lat con 7 decimales, x, y de pyproj y la vuelta de pyproj). Sin la variable no hace nada.
     #[test]
     fn bit_a_bit_muestra_pyproj() {
-        let Ok(p) = std::env::var("WACHI_PROJ_REF") else { return };
+        let Ok(p) = std::env::var("WACHI_PROJ_REF") else {
+            return;
+        };
         let b = std::fs::read(p).unwrap();
-        let v: Vec<f64> = b.chunks_exact(8).map(|c| f64::from_le_bytes(c.try_into().unwrap())).collect();
+        let v: Vec<f64> = b
+            .as_chunks::<8>()
+            .0
+            .iter()
+            .map(|c| f64::from_le_bytes(*c))
+            .collect();
         let mut malos = 0;
-        for r in v.chunks_exact(6) {
+        for r in v.as_chunks::<6>().0 {
             if to_utm(r[0], r[1]) != (r[2], r[3]) || to_ll(r[2], r[3]) != (r[4], r[5]) {
                 malos += 1;
             }
         }
-        assert_eq!(malos, 0, "{malos} de {} puntos difieren de pyproj", v.len() / 6);
+        assert_eq!(
+            malos,
+            0,
+            "{malos} de {} puntos difieren de pyproj",
+            v.len() / 6
+        );
     }
 }

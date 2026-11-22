@@ -24,3 +24,15 @@ jobs:
             echo "::error::web/ usa palabras que el ADR 011 prohíbe"
             exit 1
           fi
+  engine:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: engine } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with: { components: "clippy, rustfmt" }
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: engine }
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets --locked -- -D warnings
+      - run: cargo test --locked
