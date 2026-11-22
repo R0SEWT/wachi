@@ -77,7 +77,14 @@ fn serve(cfg: Settings, args: &[String]) -> Result<()> {
         tracing::info!("escuchando en http://{host}:{port}");
         axum::serve(listener, app)
             .with_graceful_shutdown(async {
-                let _ = tokio::signal::ctrl_c().await;
+                // systemd detiene con SIGTERM; Ctrl+C manda SIGINT
+                let mut term = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+                    .expect("no se pudo escuchar SIGTERM");
+                tokio::select! {
+                    _ = tokio::signal::ctrl_c() => {}
+                    _ = term.recv() => {}
+                }
+                tracing::info!("apagando: termino las peticiones en curso");
             })
             .await?;
         Ok(())
