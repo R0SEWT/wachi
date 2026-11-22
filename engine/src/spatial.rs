@@ -115,7 +115,7 @@ impl Grid {
             .max((qy - by0).abs())
             .max((by1 - qy).abs());
         let mut best: Option<(f64, u32)> = None;
-        let mut visit = |cx: i64, cy: i64, best: &mut Option<(f64, u32)>| {
+        let visit = |cx: i64, cy: i64, best: &mut Option<(f64, u32)>| {
             if let Some(&(s, e)) = self.cells.get(&(cx, cy)) {
                 for i in s as usize..e as usize {
                     let p = self.pts[i];
