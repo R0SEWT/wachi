@@ -128,6 +128,9 @@ uv run python ../engine/paridad/paridad_http.py http://127.0.0.1:8100 http://127
 
 En la 4060, con la API en Python funcionando:
 
+0. Comprobar la glibc del host: `ssh 4060 ldd --version` debe dar ≥ 2.35 (Ubuntu 22.04+), que es
+   contra la que se enlaza el binario en la laptop. Si es menor, compilar en el host
+   (`cd ~/wachi/engine && cargo build --release`) y apuntar la unidad a `target/release/wachi`.
 1. `deploy/deploy.sh 4060 engine` — compila aquí, copia el binario a `~/wachi/engine/wachi`,
    instala la unidad y la arranca. `Conflicts=wachi-api.service` detiene la de Python (mismo
    puerto). La primera vez construye `data/network.wachi` (~15 s; `/health` responde 503
