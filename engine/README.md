@@ -37,13 +37,15 @@ clientes con keep-alive ya está en el tope y rechaza casi todo. En Rust el lím
 |---|---|
 | Red construida (vías, nodos, aristas, km, recintos por tipo) | idéntica |
 | Proyección UTM, 20.000 puntos con 7 decimales, ida y vuelta | **bit a bit** igual a pyproj |
+| Celda H3 res 8 (`h3o` frente a `h3-py`), 300.000 puntos en Lima | idéntica en todos |
 | `/route`, 504 pares, 250.000 eventos | **504/504 idénticas** |
 | `/route`, 5.004 pares (otra semilla) | **5.004/5.004 idénticas** |
 | `/route`, 504 pares, 20.000 eventos (68 rutas con tramos de pocos datos) | **504/504 idénticas** |
 | `/route`, 504 pares, `WACHI_BETAS=[0.5,1,2,4]` (varias candidatas) | **504/504 idénticas** |
+| `/route`, 504 pares, eventos con coordenadas basura (0, 0) y lat/lon invertidas | **504/504 idénticas** |
 | HTTP: `/health`, 504 rutas, 9 cuerpos raros, 404 | **517/517 idénticas byte a byte** |
 | A* frente a Dijkstra puro: 1.200 búsquedas en grilla con recinto y β ∈ {0; 0,5; 2} | mismo óptimo |
-| Suite de `api/tests` portada (`tests/motor.rs`) + unitarios | 33 tests en verde |
+| Suite de `api/tests` portada (`tests/motor.rs`) + unitarios | 35 tests en verde |
 
 Para lograrlo se replicó la semántica exacta de lo que usa Python:
 
@@ -87,7 +89,13 @@ Configuración: las mismas variables `WACHI_*` de `api/wachi/config.py` (y `api/
 caché: `WACHI_GRAPH_CACHE_RS` (por defecto `data/network.wachi`). Logs a stderr con `RUST_LOG`;
 una línea por petición (`POST /route 200 2.0ms`), nunca el cuerpo ni la IP.
 
-Tests: `cargo test` (con `WACHI_PROJ_REF=archivo.bin` compara además una muestra de pyproj).
+Tests: `cargo test`. Con `WACHI_PROJ_REF=…` y `WACHI_H3_REF=…` compara además muestras grandes
+de pyproj y h3-py (archivos binarios generados desde Python; ver los tests en `geo_utm.rs` y
+`surface.rs`).
+
+Robustez: un evento con coordenadas basura no afecta la memoria (rejilla dispersa); si la carga
+falla o entra en pánico, el proceso sale con código 1 para que systemd lo reinicie (nunca queda
+respondiendo `iniciando` para siempre); una red vacía da un error que nombra el bbox y el pbf.
 
 ## Reproducir la paridad
 

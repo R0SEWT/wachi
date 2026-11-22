@@ -287,3 +287,30 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod tests_h3 {
+    use super::*;
+
+    /// `WACHI_H3_REF=archivo.bin cargo test`: registros (lat f64, lon f64, celda u64) de h3-py.
+    #[test]
+    fn h3o_igual_a_h3_py() {
+        let Ok(p) = std::env::var("WACHI_H3_REF") else {
+            return;
+        };
+        let b = std::fs::read(p).unwrap();
+        let mut malos = 0;
+        let mut n = 0;
+        for r in b.as_chunks::<24>().0 {
+            let lat = f64::from_le_bytes(r[0..8].try_into().unwrap());
+            let lon = f64::from_le_bytes(r[8..16].try_into().unwrap());
+            let c = u64::from_le_bytes(r[16..24].try_into().unwrap());
+            n += 1;
+            if cell_of(lat, lon, Resolution::Eight).map(u64::from) != Some(c) {
+                malos += 1;
+            }
+        }
+        assert!(n > 0);
+        assert_eq!(malos, 0, "{malos} de {n} celdas difieren de h3-py");
+    }
+}
