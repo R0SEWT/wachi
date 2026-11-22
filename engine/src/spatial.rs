@@ -106,6 +106,31 @@ impl Grid {
         n
     }
 
+    /// Índices originales de los puntos a distancia ≤ r.
+    pub fn within_ids(&self, x: f64, y: f64, r: f64, out: &mut Vec<u32>) {
+        out.clear();
+        let r2 = r * r;
+        let (Some((cx0, cx1)), Some((cy0, cy1))) = (
+            self.range(x - r, x + r, self.x0, self.nx),
+            self.range(y - r, y + r, self.y0, self.ny),
+        ) else {
+            return;
+        };
+        for cy in cy0..=cy1 {
+            let row = cy * self.nx;
+            let (s, e) = (
+                self.start[row + cx0] as usize,
+                self.start[row + cx1 + 1] as usize,
+            );
+            for i in s..e {
+                let p = self.pts[i];
+                if (p[0] - x).powi(2) + (p[1] - y).powi(2) <= r2 {
+                    out.push(self.ids[i]);
+                }
+            }
+        }
+    }
+
     /// Índice original y distancia del punto más cercano (empate: el de menor índice).
     pub fn nearest(&self, x: f64, y: f64) -> Option<(usize, f64)> {
         if self.pts.is_empty() {

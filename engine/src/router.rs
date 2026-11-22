@@ -139,6 +139,8 @@ pub struct Router {
     pub edge_poly: Vec<i32>,
     recintos: Vec<Recinto>,
     node_grid: Grid,
+    /// Solo con `WACHI_SNAP=arista`: muestras de las aristas (cada ≤ 30 m) y su arista.
+    edge_samples: Option<(Grid, Vec<u32>)>,
     /// adyacencia no dirigida: para cada nodo, (arista, vecino); primero las que salen por `u`
     adj_start: Vec<u32>,
     adj: Vec<(u32, u32)>,
@@ -250,6 +252,13 @@ impl Router {
             fill[v as usize] += 1;
         }
         let node_grid = Grid::new(&net.nxy, 100.0);
+        let edge_samples = (cfg.snap == crate::config::Snap::Arista).then(|| {
+            let mut owner = vec![0u32; samples.len()];
+            for e in 0..ne {
+                owner[first[e]..first[e + 1]].fill(e as u32);
+            }
+            (Grid::new(&samples, 50.0), owner)
+        });
         Router {
             net,
             surf,
@@ -259,6 +268,7 @@ impl Router {
             edge_poly,
             recintos,
             node_grid,
+            edge_samples,
             adj_start,
             adj,
         }
@@ -488,6 +498,307 @@ impl Router {
 
     pub fn snap(&self, x: f64, y: f64) -> Option<(u32, f64)> {
         self.node_grid.nearest(x, y).map(|(i, d)| (i as u32, d))
+    }
+}
+
+/// Un punto sobre una arista: `t` metros desde su extremo `u`, sobre la polilínea.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct EdgePoint {
+    pub edge: u32,
+    pub t: f64,
+    pub xy: [f64; 2],
+    /// distancia del punto pedido a la arista
+    pub dist: f64,
+}
+
+/// Punto más cercano de la polilínea `c` a (x, y): (distancia, t desde el inicio, punto).
+pub fn project(c: &[[f64; 2]], x: f64, y: f64) -> (f64, f64, [f64; 2]) {
+    let mut best = (f64::INFINITY, 0.0, c[0]);
+    let mut acc = 0.0;
+    for w in c.windows(2) {
+        let (a, b) = (w[0], w[1]);
+        let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+        let l2 = dx * dx + dy * dy;
+        let l = l2.sqrt();
+        let f = if l2 > 0.0 {
+            (((x - a[0]) * dx + (y - a[1]) * dy) / l2).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        let p = [a[0] + f * dx, a[1] + f * dy];
+        let d = ((p[0] - x).powi(2) + (p[1] - y).powi(2)).sqrt();
+        if d < best.0 {
+            best = (d, acc + f * l, p);
+        }
+        acc += l;
+    }
+    best
+}
+
+/// Tramo de la polilínea `c` desde la posición `t` hasta su inicio (`hacia_u`) o su final.
+fn partial(c: &[[f64; 2]], t: f64, p: [f64; 2], hacia_u: bool) -> Vec<[f64; 2]> {
+    // segmento que contiene t
+    let mut acc = 0.0;
+    let mut k = c.len() - 2;
+    for (i, w) in c.windows(2).enumerate() {
+        let l = seg_len(w[0], w[1]);
+        if acc + l >= t {
+            k = i;
+            break;
+        }
+        acc += l;
+    }
+    let mut out = vec![p];
+    if hacia_u {
+        out.extend(c[..=k].iter().rev());
+    } else {
+        out.extend(c[k + 1..].iter());
+    }
+    out.dedup();
+    out
+}
+
+impl Router {
+    /// Punto más cercano de la red (exacto). Requiere `WACHI_SNAP=arista`.
+    pub fn snap_edge(&self, x: f64, y: f64) -> Option<EdgePoint> {
+        let (grid, owner) = self.edge_samples.as_ref()?;
+        let (_, d0) = grid.nearest(x, y)?;
+        // toda posición de una arista está a ≤ 15 m de alguna de sus muestras (separación ≤ 30 m),
+        // así que la arista más cercana tiene una muestra a ≤ d0 + 15
+        let mut ids = Vec::new();
+        grid.within_ids(x, y, d0 + 15.0 + 1e-6, &mut ids);
+        let mut cand: Vec<u32> = ids.iter().map(|&i| owner[i as usize]).collect();
+        cand.sort_unstable();
+        cand.dedup();
+        let mut best: Option<EdgePoint> = None;
+        for e in cand {
+            let (d, t, p) = project(self.net.edge_xy(e as usize), x, y);
+            if best.is_none_or(|b| d < b.dist) {
+                best = Some(EdgePoint {
+                    edge: e,
+                    t,
+                    xy: p,
+                    dist: d,
+                });
+            }
+        }
+        best
+    }
+
+    /// Recintos que contienen a alguno de los puntos (UTM).
+    pub fn allowed_polys_xy(&self, pts: &[[f64; 2]]) -> HashSet<i32> {
+        let mut out = HashSet::new();
+        for &[x, y] in pts {
+            for (i, (rc, r)) in self.recintos.iter().zip(&self.net.recintos).enumerate() {
+                if rc.orig_bb.is_some_and(|b| {
+                    x >= b.min().x && x <= b.max().x && y >= b.min().y && y <= b.max().y
+                }) && r.geom.contains(&Point::new(x, y))
+                {
+                    out.insert(i as i32);
+                }
+            }
+        }
+        out
+    }
+
+    /// Camino de menor costo entre dos puntos sobre aristas. Las aristas de origen y destino se
+    /// recorren en parte (costo proporcional a su largo) y nunca se bloquean: la persona ya está
+    /// ahí. A* con extremos virtuales; se detiene cuando la mejor llegada no puede mejorar.
+    pub fn route_points(
+        &self,
+        s: &EdgePoint,
+        d: &EdgePoint,
+        beta: f64,
+        allowed: Option<&HashSet<i32>>,
+    ) -> Option<Route> {
+        let net = &self.net;
+        let factor = |e: u32| self.weight(e as usize, beta) / net.length[e as usize];
+        let (se, de) = (s.edge as usize, d.edge as usize);
+        let (ls, ld) = (net.length[se], net.length[de]);
+        if s.edge == d.edge && s.t == d.t {
+            return Some(Route {
+                nodes: vec![],
+                edges: vec![],
+                xy: vec![s.xy, d.xy],
+                length_m: 0.0,
+            });
+        }
+        let blocked = |e: usize| {
+            let p = self.edge_poly[e];
+            e != se && e != de && p >= 0 && allowed.is_some_and(|a| !a.contains(&p))
+        };
+        let tgt = d.xy;
+        let h = |n: u32| {
+            let p = net.nxy[n as usize];
+            ((p[0] - tgt[0]).powi(2) + (p[1] - tgt[1]).powi(2)).sqrt() * (1.0 - 1e-9)
+        };
+        // llegada directa por la misma arista
+        let mut best: (f64, Option<u32>) = if s.edge == d.edge {
+            ((s.t - d.t).abs() * factor(s.edge), None)
+        } else {
+            (f64::INFINITY, None)
+        };
+        // costo de cada extremo de la arista destino hasta el punto
+        let (du, dv) = (net.u[de], net.v[de]);
+        let to_t = |n: u32| {
+            if n == du {
+                d.t * factor(d.edge)
+            } else {
+                (ld - d.t) * factor(d.edge)
+            }
+        };
+        const SRC: u32 = u32::MAX;
+        let found = SCRATCH.with(|sc| {
+            let mut sc = sc.borrow_mut();
+            let nn = net.nxy.len();
+            if sc.stamp.len() != nn {
+                *sc = Scratch {
+                    dist: vec![0.0; nn],
+                    pred: vec![0; nn],
+                    stamp: vec![0; nn],
+                    done: vec![0; nn],
+                    epoch: 0,
+                };
+            }
+            sc.epoch = sc.epoch.wrapping_add(1);
+            if sc.epoch == 0 {
+                sc.stamp.fill(0);
+                sc.done.fill(0);
+                sc.epoch = 1;
+            }
+            let g = sc.epoch;
+            let Scratch {
+                dist,
+                pred,
+                stamp,
+                done,
+                ..
+            } = &mut *sc;
+            let mut heap = BinaryHeap::new();
+            for (n, c) in [
+                (net.u[se], s.t * factor(s.edge)),
+                (net.v[se], (ls - s.t) * factor(s.edge)),
+            ] {
+                let ni = n as usize;
+                if stamp[ni] != g || c < dist[ni] {
+                    stamp[ni] = g;
+                    dist[ni] = c;
+                    pred[ni] = SRC;
+                    heap.push(Item(c + h(n), n));
+                }
+            }
+            while let Some(Item(k, n)) = heap.pop() {
+                if k >= best.0 {
+                    break;
+                }
+                let ni = n as usize;
+                if done[ni] == g {
+                    continue;
+                }
+                done[ni] = g;
+                let dn = dist[ni];
+                if n == du || n == dv {
+                    let c = dn + to_t(n);
+                    if c < best.0 {
+                        best = (c, Some(n));
+                    }
+                }
+                for &(e, m) in
+                    &self.adj[self.adj_start[ni] as usize..self.adj_start[ni + 1] as usize]
+                {
+                    let mi = m as usize;
+                    if done[mi] == g || blocked(e as usize) {
+                        continue;
+                    }
+                    let alt = dn + self.weight(e as usize, beta);
+                    if stamp[mi] != g || alt < dist[mi] {
+                        stamp[mi] = g;
+                        dist[mi] = alt;
+                        pred[mi] = e;
+                        heap.push(Item(alt + h(m), m));
+                    }
+                }
+            }
+            if !best.0.is_finite() {
+                return None;
+            }
+            // cadena de aristas completas desde el nodo de llegada hasta un extremo del origen
+            let mut nodes = Vec::new();
+            let mut edges = Vec::new();
+            if let Some(end) = best.1 {
+                let mut cur = end;
+                nodes.push(cur);
+                while pred[cur as usize] != SRC {
+                    let e = pred[cur as usize];
+                    edges.push(e);
+                    let (u, v) = (net.u[e as usize], net.v[e as usize]);
+                    cur = if v == cur { u } else { v };
+                    nodes.push(cur);
+                }
+                nodes.reverse();
+                edges.reverse();
+            }
+            Some((nodes, edges))
+        })?;
+        let (nodes, mid) = found;
+        let mut xy: Vec<[f64; 2]> = Vec::new();
+        let mut edges = vec![s.edge];
+        let mut length;
+        if nodes.is_empty() {
+            // por la misma arista, sin pasar por sus extremos
+            let c = net.edge_xy(se);
+            let (a, b) = if s.t <= d.t { (s, d) } else { (d, s) };
+            let mut seg = vec![a.xy];
+            let mut acc = 0.0;
+            for w in c.windows(2) {
+                acc += seg_len(w[0], w[1]);
+                if acc > a.t && acc < b.t {
+                    seg.push(w[1]);
+                }
+            }
+            seg.push(b.xy);
+            if s.t > d.t {
+                seg.reverse();
+            }
+            seg.dedup();
+            xy = seg;
+            length = (s.t - d.t).abs();
+        } else {
+            let first = nodes[0];
+            let c = net.edge_xy(se);
+            xy.extend(partial(c, s.t, s.xy, first == net.u[se]));
+            length = if first == net.u[se] { s.t } else { ls - s.t };
+            for (k, &e) in mid.iter().enumerate() {
+                let c = net.edge_xy(e as usize);
+                let fwd = net.u[e as usize] == nodes[k];
+                let it: Box<dyn Iterator<Item = &[f64; 2]>> = if fwd {
+                    Box::new(c.iter())
+                } else {
+                    Box::new(c.iter().rev())
+                };
+                xy.extend(it.skip(1));
+                length += net.length[e as usize];
+                edges.push(e);
+            }
+            let last = *nodes.last().unwrap();
+            let mut tail = partial(net.edge_xy(de), d.t, d.xy, last == du);
+            tail.reverse(); // del nodo hacia el punto
+            xy.extend(tail.into_iter().skip(1));
+            length += if last == du { d.t } else { ld - d.t };
+            if edges.last() != Some(&d.edge) || edges.len() == 1 {
+                edges.push(d.edge);
+            }
+        }
+        xy.dedup();
+        if xy.len() == 1 {
+            xy.push(xy[0]);
+        }
+        Some(Route {
+            nodes,
+            edges,
+            xy,
+            length_m: length,
+        })
     }
 }
 

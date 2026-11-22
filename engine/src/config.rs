@@ -32,6 +32,15 @@ pub struct Settings {
     pub recinto_shrink_m: f64,
     pub recinto_tags: Vec<(String, String)>,
     pub cors_origins: Vec<String>,
+    /// Cómo se ajustan origen y destino a la red: `Nodo` (esquina más cercana, como `api/`) o
+    /// `Arista` (punto más cercano de la calle; experimental, ver docs/experiments).
+    pub snap: Snap,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Snap {
+    Nodo,
+    Arista,
 }
 
 impl Default for Settings {
@@ -69,6 +78,7 @@ impl Default for Settings {
                 "http://localhost:8080".into(),
                 "http://127.0.0.1:8080".into(),
             ],
+            snap: Snap::Nodo,
         }
     }
 }
@@ -164,6 +174,13 @@ impl Settings {
         }
         if let Some(v) = get("cors_origins") {
             s.cors_origins = json("cors_origins", v)?;
+        }
+        if let Some(v) = get("snap") {
+            s.snap = match v.trim().to_ascii_lowercase().as_str() {
+                "nodo" => Snap::Nodo,
+                "arista" => Snap::Arista,
+                _ => bail!("WACHI_SNAP debe ser nodo o arista, no {v:?}"),
+            };
         }
         if s.betas.is_empty() {
             bail!("WACHI_BETAS no puede estar vacío: la Tranquila sale del primer β");

@@ -14,6 +14,7 @@
 | [015](015-regla-de-seleccion.md) | Regla: menor exposición con desvío ≤ min(15 %, 5 min), si reduce ≥ 20 % | Aceptado |
 | [016](016-superficie-radio-150m.md) | Superficie: robos registrados a ≤ 150 m | Aceptado |
 | [017](017-motor-en-rust.md) | Motor en Rust con paridad exacta (`engine/`) | Propuesto |
+| [018](018-ajuste-a-la-calle.md) | Origen y destino en el punto más cercano de la calle | Propuesto |
 
 Los ADR 001, 002, 004, 005 y 006 quedaron en `wachi-research` (reemplazados o archivados).
 Evidencia: `../experiments/2026-10-comparacion-ruteo.md`.
