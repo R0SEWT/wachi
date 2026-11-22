@@ -1,0 +1,22 @@
+[Unit]
+Description=Wachi API (motor Rust)
+After=network-online.target
+# Mismo puerto que wachi-api: activar uno detiene al otro. Volver a Python:
+#   systemctl --user start wachi-api
+Conflicts=wachi-api.service
+
+[Service]
+WorkingDirectory=%h/wachi/api
+# Lee el mismo api/.env (WACHI_*). La caché del grafo es propia: data/network.wachi
+# (WACHI_GRAPH_CACHE_RS); si falta o no coincide con el pbf, la construye al arrancar (~15 s).
+ExecStart=%h/wachi/engine/wachi serve --host 127.0.0.1 --port 8000 --max-concurrency 16
+Restart=on-failure
+RestartSec=5
+Nice=10
+# Medido con la red de Lima: ~280 MB de pico construyendo la caché y ~115 MB sirviendo.
+MemoryMax=1G
+CPUQuota=200%
+Environment=RUST_LOG=info
+
+[Install]
+WantedBy=default.target

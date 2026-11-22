@@ -5,6 +5,7 @@ menos robos registrados cerca, si no te alarga más de 5 minutos o 15 %).
 
 - `web/`: PWA (https://wachi.rosewt.dev)
 - `api/`: motor de rutas (FastAPI). `cd api && uv sync && uv run uvicorn wachi.api:app`
+- `engine/`: el mismo motor en Rust, con respuestas idénticas (propuesta, ADR 017; ver `engine/README.md`)
 - `docs/adr/`: decisiones; `docs/experiments/`: evidencia reproducible
 
 Aplicación del hallazgo de *What Survives an Uneven Record? Fine-Grained Crime Prediction
