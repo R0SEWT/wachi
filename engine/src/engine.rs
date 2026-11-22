@@ -4,7 +4,7 @@ use crate::config::Settings;
 use crate::geo_utm::{to_ll, to_utm};
 use crate::network::load_or_build;
 use crate::num::{round_half_even, round_nd};
-use crate::router::{Measure, Route, Router};
+use crate::router::{EdgePoint, Measure, Route, Router};
 use crate::surface::{Surface, load_events};
 use anyhow::Result;
 use serde::Serialize;
@@ -215,11 +215,55 @@ impl Engine {
         }
     }
 
+    fn snap_edge(&self, lat: f64, lon: f64, which: &'static str) -> Result<EdgePoint, RouteError> {
+        let [s, w, n, e] = self.router.cfg.bbox;
+        if !(s <= lat && lat <= n && w <= lon && lon <= e) {
+            return Err(RouteError::FueraDeCobertura);
+        }
+        let (x, y) = to_utm(lon, lat);
+        match self.router.snap_edge(x, y) {
+            Some(p) if p.dist <= self.router.cfg.snap_max_m => Ok(p),
+            _ => Err(RouteError::SinViaPeatonalCerca(which)),
+        }
+    }
+
+    /// Variante experimental (`WACHI_SNAP=arista`): origen y destino en el punto más cercano de la
+    /// calle, no en la esquina. Misma regla y misma presentación.
+    fn route_arista(
+        &self,
+        origin: (f64, f64),
+        destination: (f64, f64),
+    ) -> Result<Response, RouteError> {
+        let a = self.snap_edge(origin.0, origin.1, "origin")?;
+        let b = self.snap_edge(destination.0, destination.1, "destination")?;
+        let r = &self.router;
+        let allowed = r.allowed_polys_xy(&[a.xy, b.xy]);
+        let fast = r
+            .route_points(&a, &b, 0.0, Some(&allowed))
+            .ok_or(RouteError::SinRuta)?;
+        let cands: Vec<(Route, Measure)> = r
+            .cfg
+            .betas
+            .iter()
+            .filter_map(|&beta| r.route_points(&a, &b, beta, Some(&allowed)))
+            .map(|rt| {
+                let m = r.measure(&rt);
+                (rt, m)
+            })
+            .collect();
+        let fast_m = r.measure(&fast);
+        let sel = select(&fast, &fast_m, &cands, &r.cfg);
+        Ok(build_response(&sel, r))
+    }
+
     pub fn route(
         &self,
         origin: (f64, f64),
         destination: (f64, f64),
     ) -> Result<Response, RouteError> {
+        if self.router.cfg.snap == crate::config::Snap::Arista {
+            return self.route_arista(origin, destination);
+        }
         let a = self.snap(origin.0, origin.1, "origin")?;
         let b = self.snap(destination.0, destination.1, "destination")?;
         let r = &self.router;

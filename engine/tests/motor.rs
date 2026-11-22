@@ -782,3 +782,185 @@ fn astar_da_el_mismo_optimo_que_dijkstra() {
         "mismo camino en {iguales} de 1200 búsquedas"
     );
 }
+
+// ---------------- WACHI_SNAP=arista (experimental) ----------------
+
+fn cfg_arista(dir: &std::path::Path) -> Settings {
+    Settings {
+        snap: wachi_engine::config::Snap::Arista,
+        ..cfg(dir)
+    }
+}
+
+#[test]
+fn arista_a_mitad_de_cuadra_no_se_desvia_a_la_esquina() {
+    let ca = cfg_arista(&tmp());
+    let e = Engine {
+        router: router(net(), &ca),
+    };
+    // a 5 m de la mitad de A–B, hacia B: la esquina más cercana es C (a 195 m), no A (a 500 m)
+    let (o, d) = (ll(500.0, 5.0), ll(1000.0, 0.0));
+    let out = serde_json::to_value(e.route((o.1, o.0), (d.1, d.0)).unwrap()).unwrap();
+    let dist = out["fast"]["distance_m"].as_i64().unwrap();
+    assert!((dist - 500).abs() <= 2, "por la calle son 500 m, no {dist}");
+    // con snap a nodo sale desde C: C–B ≈ 538 m
+    let cn = cfg(&tmp());
+    let en = Engine {
+        router: router(net(), &cn),
+    };
+    let outn = serde_json::to_value(en.route((o.1, o.0), (d.1, d.0)).unwrap()).unwrap();
+    assert!((outn["fast"]["distance_m"].as_i64().unwrap() - 539).abs() <= 3);
+    // la geometría empieza sobre la calle, a ≤ 5 m del punto pedido
+    let g0 = &out["fast"]["geometry"][0];
+    let (x, y) = to_utm(g0[1].as_f64().unwrap(), g0[0].as_f64().unwrap());
+    let (xo, yo) = to_utm(o.0, o.1);
+    assert!(((x - xo).powi(2) + (y - yo).powi(2)).sqrt() <= 5.5);
+}
+
+#[test]
+fn arista_misma_arista_va_directo() {
+    let ca = cfg_arista(&tmp());
+    let r = router(net(), &ca);
+    let p = |dx: f64, dy: f64| {
+        let q = ll(dx, dy);
+        let (x, y) = to_utm(q.0, q.1);
+        r.snap_edge(x, y).unwrap()
+    };
+    let (a, b) = (p(300.0, 3.0), p(700.0, -3.0));
+    assert_eq!(a.edge, b.edge);
+    let rt = r.route_points(&a, &b, 0.0, None).unwrap();
+    assert!((rt.length_m - 400.0).abs() < 2.0, "{}", rt.length_m);
+    assert_eq!(rt.xy.len(), 2);
+    let back = r.route_points(&b, &a, 0.0, None).unwrap();
+    assert!((back.length_m - rt.length_m).abs() < 1e-9);
+    assert_eq!(r.route_points(&a, &a, 0.0, None).unwrap().length_m, 0.0);
+}
+
+/// Costo de `route_points` = mínimo entre la llegada directa (misma arista) y las cuatro
+/// combinaciones de extremos de las aristas de origen y destino unidas por Dijkstra entre nodos.
+#[test]
+fn arista_igual_a_fuerza_bruta() {
+    let mut s = 999u64;
+    let n = 25i64;
+    let id = |i: i64, j: i64| 1000 + i * n + j;
+    let mut pos = std::collections::HashMap::new();
+    for i in 0..n {
+        for j in 0..n {
+            pos.insert(
+                id(i, j),
+                ll(
+                    i as f64 * 70.0 + (lcg(&mut s) - 0.5) * 30.0,
+                    j as f64 * 70.0 + (lcg(&mut s) - 0.5) * 30.0,
+                ),
+            );
+        }
+    }
+    let mut ws = Vec::new();
+    let mut extra = 10_000_000i64;
+    for i in 0..n {
+        for j in 0..n {
+            for (di, dj) in [(1, 0), (0, 1)] {
+                if i + di < n && j + dj < n && lcg(&mut s) < 0.85 {
+                    let (a, b) = (id(i, j), id(i + di, j + dj));
+                    let (pa, pb) = (pos[&a], pos[&b]);
+                    extra += 1;
+                    let mid = (
+                        (pa.0 + pb.0) / 2.0 + (lcg(&mut s) - 0.5) * 3e-4,
+                        (pa.1 + pb.1) / 2.0 + (lcg(&mut s) - 0.5) * 3e-4,
+                    );
+                    ws.push(Way {
+                        ids: vec![a, extra, b],
+                        lonlat: vec![pa, mid, pb],
+                        highway: "residential".into(),
+                    });
+                }
+            }
+        }
+    }
+    let net = build_network(OsmData {
+        ways: ws,
+        recintos: vec![],
+        recintos_descartados: 0,
+    });
+    let mut ev = Events {
+        lat: vec![],
+        lon: vec![],
+        day: vec![],
+    };
+    for _ in 0..2000 {
+        let (lo, la) = ll(lcg(&mut s) * 1700.0, lcg(&mut s) * 1700.0);
+        ev.lat.push(la);
+        ev.lon.push(lo);
+        ev.day.push(19_000);
+    }
+    let ca = cfg_arista(&tmp());
+    let r = Router::new(net, Surface::build(&ev, &ca).unwrap(), ca.clone());
+    let (x0, y0) = to_utm(LON0, LAT0);
+    for _ in 0..300 {
+        let pa = r
+            .snap_edge(x0 + lcg(&mut s) * 1700.0, y0 + lcg(&mut s) * 1700.0)
+            .unwrap();
+        let pb = r
+            .snap_edge(x0 + lcg(&mut s) * 1700.0, y0 + lcg(&mut s) * 1700.0)
+            .unwrap();
+        for beta in [0.0, 0.5] {
+            let f = |e: u32| r.weight(e as usize, beta) / r.net.length[e as usize];
+            let ends = |p: &wachi_engine::router::EdgePoint| {
+                let e = p.edge as usize;
+                [
+                    (r.net.u[e], p.t * f(p.edge)),
+                    (r.net.v[e], (r.net.length[e] - p.t) * f(p.edge)),
+                ]
+            };
+            let mut bf = if pa.edge == pb.edge {
+                (pa.t - pb.t).abs() * f(pa.edge)
+            } else {
+                f64::INFINITY
+            };
+            for (na, ca_) in ends(&pa) {
+                for (nb, cb) in ends(&pb) {
+                    if let Some(rt) = r.route_dijkstra(na, nb, beta, None) {
+                        bf = bf.min(ca_ + r.cost(&rt, beta) + cb);
+                    }
+                }
+            }
+            let got = r.route_points(&pa, &pb, beta, None).unwrap();
+            // costo de lo devuelto: tramos parciales + aristas completas intermedias
+            let partial_cost = {
+                let mut c = 0.0;
+                let k = got.edges.len();
+                if got.nodes.is_empty() {
+                    c = (pa.t - pb.t).abs() * f(pa.edge);
+                } else {
+                    let first = got.nodes[0];
+                    c += if first == r.net.u[pa.edge as usize] {
+                        pa.t
+                    } else {
+                        r.net.length[pa.edge as usize] - pa.t
+                    } * f(pa.edge);
+                    for &e in &got.edges[1..k - 1] {
+                        c += r.weight(e as usize, beta);
+                    }
+                    let last = *got.nodes.last().unwrap();
+                    c += if last == r.net.u[pb.edge as usize] {
+                        pb.t
+                    } else {
+                        r.net.length[pb.edge as usize] - pb.t
+                    } * f(pb.edge);
+                }
+                c
+            };
+            assert!(
+                (partial_cost - bf).abs() <= 1e-6 * bf.max(1.0),
+                "β={beta}: {partial_cost} vs fuerza bruta {bf}"
+            );
+            // el largo devuelto coincide con la geometría
+            let lg = wachi_engine::router::polyline_len(&got.xy);
+            assert!(
+                (lg - got.length_m).abs() < 1e-6 * got.length_m.max(1.0),
+                "largo {} vs geometría {lg}",
+                got.length_m
+            );
+        }
+    }
+}

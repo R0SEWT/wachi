@@ -82,6 +82,9 @@ cd ../api                                   # mismo directorio de trabajo que la
 ../engine/target/release/wachi batch PARES.jsonl SALIDA.jsonl   # paridad/benchmark
 ```
 
+Opción experimental: `WACHI_SNAP=arista` ajusta origen y destino al punto más cercano de la
+calle en vez de a la esquina (ADR 018, propuesto; por defecto `nodo`, igual que `api/`).
+
 Configuración: las mismas variables `WACHI_*` de `api/wachi/config.py` (y `api/.env`), salvo la
 caché: `WACHI_GRAPH_CACHE_RS` (por defecto `data/network.wachi`). Logs a stderr con `RUST_LOG`;
 una línea por petición (`POST /route 200 2.0ms`), nunca el cuerpo ni la IP.
