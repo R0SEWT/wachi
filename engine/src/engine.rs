@@ -291,6 +291,13 @@ pub fn load_engine(cfg: &Settings) -> Result<Engine> {
     let t0 = Instant::now();
     let net = load_or_build(cfg)?;
     tracing::info!("red: {}", serde_json::to_string(&net.stats)?);
+    if net.n_edges() == 0 {
+        anyhow::bail!(
+            "la red peatonal quedó vacía: revisar WACHI_BBOX {:?} y el pbf {}",
+            cfg.bbox,
+            cfg.pbf_path.display()
+        );
+    }
     let ev = load_events(&cfg.events_path, &cfg.events_sha256)?;
     let surf = Surface::build(&ev, cfg)?;
     tracing::info!(

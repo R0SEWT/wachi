@@ -165,10 +165,18 @@ pub fn load_events(path: &Path, sha256: &str) -> Result<Events> {
                 _ => None,
             }
         };
-        let (la, lo, fe) = (col("lat")?, col("lon")?, col("fecha")?);
-        if !matches!(la.data_type(), DataType::Float64 | DataType::Float32) {
-            bail!("lat debe ser float, es {}", la.data_type());
-        }
+        // lat/lon numéricas de cualquier tipo (float, entero, decimal) pasan a float64, como pandas
+        let as_f64 = |a: arrow::array::ArrayRef, name: &str| -> Result<arrow::array::ArrayRef> {
+            if !a.data_type().is_numeric() {
+                bail!("{name} debe ser numérica, es {}", a.data_type());
+            }
+            Ok(arrow::compute::cast(&a, &DataType::Float64)?)
+        };
+        let (la, lo, fe) = (
+            as_f64(col("lat")?, "lat")?,
+            as_f64(col("lon")?, "lon")?,
+            col("fecha")?,
+        );
         let days = column_days(fe.as_ref())?;
         for (i, d) in days.iter().enumerate() {
             let (Some(lat), Some(lon)) = (float(la.as_ref(), i), float(lo.as_ref(), i)) else {

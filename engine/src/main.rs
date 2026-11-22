@@ -59,13 +59,23 @@ fn serve(cfg: Settings, args: &[String]) -> Result<()> {
         let cfg = cfg.clone();
         std::thread::Builder::new()
             .name("wachi-load".into())
-            .spawn(move || match engine::load_engine(&cfg) {
-                Ok(e) => {
-                    let _ = slot.set(Arc::new(e));
-                }
-                Err(e) => {
-                    tracing::error!("no se pudo cargar el motor: {e:#}");
-                    std::process::exit(1);
+            .spawn(move || {
+                // un pánico al cargar también debe terminar el proceso: si no, el hilo muere y el
+                // servidor respondería 503 `iniciando` para siempre
+                match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    engine::load_engine(&cfg)
+                })) {
+                    Ok(Ok(e)) => {
+                        let _ = slot.set(Arc::new(e));
+                    }
+                    Ok(Err(e)) => {
+                        tracing::error!("no se pudo cargar el motor: {e:#}");
+                        std::process::exit(1);
+                    }
+                    Err(_) => {
+                        tracing::error!("no se pudo cargar el motor: pánico durante la carga");
+                        std::process::exit(1);
+                    }
                 }
             })?;
     }
