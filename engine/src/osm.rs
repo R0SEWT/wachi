@@ -30,15 +30,33 @@ pub struct RecintoLL {
 }
 
 const EXCL_HW: &[&str] = &[
-    "abandoned", "bus_guideway", "busway", "bus_stop", "construction", "cycleway", "motor", "no",
-    "planned", "platform", "proposed", "raceway", "razed",
+    "abandoned",
+    "bus_guideway",
+    "busway",
+    "bus_stop",
+    "construction",
+    "cycleway",
+    "motor",
+    "no",
+    "planned",
+    "platform",
+    "proposed",
+    "raceway",
+    "razed",
 ];
-const SIDEWALK_KEYS: &[&str] = &["sidewalk", "sidewalk:both", "sidewalk:left", "sidewalk:right"];
+const SIDEWALK_KEYS: &[&str] = &[
+    "sidewalk",
+    "sidewalk:both",
+    "sidewalk:left",
+    "sidewalk:right",
+];
 const FOOT_OK: &[&str] = &["yes", "designated", "permissive"];
 
 /// Filtro tipo osmnx `network_type='walk'` + trunk sin acera y access=no (igual que Python).
 pub fn walk_ok(tags: &HashMap<&str, &str>) -> bool {
-    let Some(hw) = tags.get("highway") else { return false };
+    let Some(hw) = tags.get("highway") else {
+        return false;
+    };
     // `_EXCL_HW.search(hw)`: basta con que el patrón aparezca dentro del valor
     if tags.get("area") == Some(&"yes") || EXCL_HW.iter().any(|p| hw.contains(p)) {
         return false;
@@ -47,16 +65,22 @@ pub fn walk_ok(tags: &HashMap<&str, &str>) -> bool {
     if foot == "no" || tags.get("service") == Some(&"private") {
         return false;
     }
-    if SIDEWALK_KEYS.iter().any(|k| tags.get(k) == Some(&"separate")) {
+    if SIDEWALK_KEYS
+        .iter()
+        .any(|k| tags.get(k) == Some(&"separate"))
+    {
         return false;
     }
     if matches!(tags.get("access"), Some(&"private") | Some(&"no")) && !FOOT_OK.contains(&foot) {
         return false;
     }
     if *hw == "trunk" || *hw == "trunk_link" {
-        let has_sw = SIDEWALK_KEYS
-            .iter()
-            .any(|k| matches!(tags.get(k), Some(&"yes") | Some(&"both") | Some(&"left") | Some(&"right")));
+        let has_sw = SIDEWALK_KEYS.iter().any(|k| {
+            matches!(
+                tags.get(k),
+                Some(&"yes") | Some(&"both") | Some(&"left") | Some(&"right")
+            )
+        });
         if !has_sw && !FOOT_OK.contains(&foot) {
             return false;
         }
@@ -99,7 +123,8 @@ fn decimicro(v: i32) -> f64 {
 
 pub fn read_osm(pbf: &Path, bbox: [f64; 4], recinto_tags: &[(String, String)]) -> Result<OsmData> {
     let [s, w, n, e] = bbox;
-    let open = || ElementReader::from_path(pbf).with_context(|| format!("abriendo {}", pbf.display()));
+    let open =
+        || ElementReader::from_path(pbf).with_context(|| format!("abriendo {}", pbf.display()));
 
     // Pasada 1: nodos dentro del bbox + relaciones multipolígono de recintos.
     let (mut in_bbox, rels): (Vec<i64>, Vec<(i64, Rel)>) = open()?.par_map_reduce(
@@ -124,16 +149,16 @@ pub fn read_osm(pbf: &Path, bbox: [f64; 4], recinto_tags: &[(String, String)]) -
                 Element::Relation(r) => {
                     let tags: HashMap<&str, &str> = r.tags().collect();
                     let t = tags.get("type").copied().unwrap_or("");
-                    if t == "multipolygon" || t == "boundary" {
-                        if let Some(kind) = recinto_kind(&tags, recinto_tags) {
-                            let ways = r
-                                .members()
-                                .filter(|m| m.member_type == RelMemberType::Way)
-                                .map(|m| m.member_id)
-                                .collect();
-                            let name = tags.get("name").copied().unwrap_or("").to_string();
-                            rels.push((r.id(), Rel { kind, name, ways }));
-                        }
+                    if (t == "multipolygon" || t == "boundary")
+                        && let Some(kind) = recinto_kind(&tags, recinto_tags)
+                    {
+                        let ways = r
+                            .members()
+                            .filter(|m| m.member_type == RelMemberType::Way)
+                            .map(|m| m.member_id)
+                            .collect();
+                        let name = tags.get("name").copied().unwrap_or("").to_string();
+                        rels.push((r.id(), Rel { kind, name, ways }));
                     }
                 }
                 Element::Way(_) => {}
@@ -163,7 +188,10 @@ pub fn read_osm(pbf: &Path, bbox: [f64; 4], recinto_tags: &[(String, String)]) -
     // Pasada 2 (en orden de archivo): vías peatonales, vías-recinto y miembros de relaciones.
     let mut pend: Vec<Pend> = Vec::new();
     let mut member_refs: HashMap<i64, Vec<i64>> = HashMap::new();
-    let mut missing: Vec<usize> = rels.iter().map(|r| r.ways.iter().collect::<HashSet<_>>().len()).collect();
+    let mut missing: Vec<usize> = rels
+        .iter()
+        .map(|r| r.ways.iter().collect::<HashSet<_>>().len())
+        .collect();
     open()?.for_each(|el| {
         let Element::Way(way) = el else { return };
         let tags: HashMap<&str, &str> = way.tags().collect();
@@ -214,48 +242,54 @@ pub fn read_osm(pbf: &Path, bbox: [f64; 4], recinto_tags: &[(String, String)]) -
     needed.sort_unstable();
     needed.dedup();
     let needed_set: HashSet<i64> = needed.into_iter().collect();
-    let locs: HashMap<i64, (i32, i32)> = open()?.par_map_reduce(
-        |el| {
-            let mut out = Vec::new();
-            match el {
-                Element::DenseNode(nd) if needed_set.contains(&nd.id()) => {
-                    out.push((nd.id(), (nd.decimicro_lon(), nd.decimicro_lat())))
+    let locs: HashMap<i64, (i32, i32)> = open()?
+        .par_map_reduce(
+            |el| {
+                let mut out = Vec::new();
+                match el {
+                    Element::DenseNode(nd) if needed_set.contains(&nd.id()) => {
+                        out.push((nd.id(), (nd.decimicro_lon(), nd.decimicro_lat())))
+                    }
+                    Element::Node(nd) if needed_set.contains(&nd.id()) => {
+                        out.push((nd.id(), (nd.decimicro_lon(), nd.decimicro_lat())))
+                    }
+                    _ => {}
                 }
-                Element::Node(nd) if needed_set.contains(&nd.id()) => {
-                    out.push((nd.id(), (nd.decimicro_lon(), nd.decimicro_lat())))
-                }
-                _ => {}
-            }
-            out
-        },
-        Vec::new,
-        |mut a, b| {
-            a.extend(b);
-            a
-        },
-    )?
-    .into_iter()
-    .collect();
+                out
+            },
+            Vec::new,
+            |mut a, b| {
+                a.extend(b);
+                a
+            },
+        )?
+        .into_iter()
+        .collect();
     let ll = |id: &i64| locs.get(id).map(|&(lo, la)| (decimicro(lo), decimicro(la)));
 
     let mut ways = Vec::new();
     let mut recintos = Vec::new();
     let mut skipped = 0usize;
-    let mut push_recinto = |kind: &str, name: &str, g: Option<MultiPolygon<f64>>, skipped: &mut usize| {
-        let Some(g) = g else {
-            *skipped += 1;
-            return;
+    let mut push_recinto =
+        |kind: &str, name: &str, g: Option<MultiPolygon<f64>>, skipped: &mut usize| {
+            let Some(g) = g else {
+                *skipped += 1;
+                return;
+            };
+            use geo::BoundingRect;
+            let Some(b) = g.bounding_rect() else {
+                *skipped += 1;
+                return;
+            };
+            if b.max().x < w || b.min().x > e || b.max().y < s || b.min().y > n {
+                return;
+            }
+            recintos.push(RecintoLL {
+                kind: kind.to_string(),
+                name: name.to_string(),
+                geom: g,
+            });
         };
-        use geo::BoundingRect;
-        let Some(b) = g.bounding_rect() else {
-            *skipped += 1;
-            return;
-        };
-        if b.max().x < w || b.min().x > e || b.max().y < s || b.min().y > n {
-            return;
-        }
-        recintos.push(RecintoLL { kind: kind.to_string(), name: name.to_string(), geom: g });
-    };
     for p in pend {
         match p {
             Pend::Walk(r, hw) => {
@@ -268,7 +302,11 @@ pub fn read_osm(pbf: &Path, bbox: [f64; 4], recinto_tags: &[(String, String)]) -
                     }
                 }
                 if ids.len() >= 2 {
-                    ways.push(Way { ids, lonlat, highway: hw });
+                    ways.push(Way {
+                        ids,
+                        lonlat,
+                        highway: hw,
+                    });
                 }
             }
             Pend::AreaWay(r, kind, name) => {
@@ -286,7 +324,10 @@ pub fn read_osm(pbf: &Path, bbox: [f64; 4], recinto_tags: &[(String, String)]) -
                         if !seen.insert(*wid) {
                             continue;
                         }
-                        match member_refs.get(wid).and_then(|r| r.iter().map(ll).collect::<Option<Vec<_>>>()) {
+                        match member_refs
+                            .get(wid)
+                            .and_then(|r| r.iter().map(ll).collect::<Option<Vec<_>>>())
+                        {
                             Some(c) if c.len() >= 2 => parts.push(c),
                             _ => ok = false,
                         }
@@ -300,7 +341,11 @@ pub fn read_osm(pbf: &Path, bbox: [f64; 4], recinto_tags: &[(String, String)]) -
     if skipped > 0 {
         tracing::warn!("read_osm: {skipped} recintos descartados por geometría inválida");
     }
-    Ok(OsmData { ways, recintos, recintos_descartados: skipped })
+    Ok(OsmData {
+        ways,
+        recintos,
+        recintos_descartados: skipped,
+    })
 }
 
 /// Une tramos en anillos cerrados y arma un multipolígono (los anillos dentro de otro, a
@@ -323,8 +368,12 @@ pub fn assemble(parts: Vec<Vec<(f64, f64)>>) -> Option<MultiPolygon<f64>> {
             }
             let end = *cur.last().unwrap();
             let start = cur[0];
-            let pos = open.iter().position(|o| o[0] == end || *o.last().unwrap() == end
-                || o[0] == start || *o.last().unwrap() == start)?;
+            let pos = open.iter().position(|o| {
+                o[0] == end
+                    || *o.last().unwrap() == end
+                    || o[0] == start
+                    || *o.last().unwrap() == start
+            })?;
             let mut o = open.swap_remove(pos);
             if o[0] == end {
                 cur.extend_from_slice(&o[1..]);
@@ -347,26 +396,45 @@ pub fn assemble(parts: Vec<Vec<(f64, f64)>>) -> Option<MultiPolygon<f64>> {
     use geo::{Area, Contains};
     let polys: Vec<Polygon<f64>> = rings
         .into_iter()
-        .map(|r| Polygon::new(LineString::from(r.into_iter().map(|(x, y)| Coord { x, y }).collect::<Vec<_>>()), vec![]))
+        .map(|r| {
+            Polygon::new(
+                LineString::from(
+                    r.into_iter()
+                        .map(|(x, y)| Coord { x, y })
+                        .collect::<Vec<_>>(),
+                ),
+                vec![],
+            )
+        })
         .collect();
     let mut order: Vec<usize> = (0..polys.len()).collect();
-    order.sort_by(|&a, &b| polys[b].unsigned_area().total_cmp(&polys[a].unsigned_area()));
+    order.sort_by(|&a, &b| {
+        polys[b]
+            .unsigned_area()
+            .total_cmp(&polys[a].unsigned_area())
+    });
     // profundidad = cuántos anillos más grandes lo contienen; contenedor = el más chico de ellos
     let mut outers: Vec<(usize, Vec<LineString<f64>>)> = Vec::new();
     for (k, &i) in order.iter().enumerate() {
         let probe = polys[i].exterior().0[0];
-        let containers: Vec<usize> =
-            order[..k].iter().copied().filter(|&j| polys[j].contains(&geo::Point(probe))).collect();
-        if containers.len() % 2 == 0 {
+        let containers: Vec<usize> = order[..k]
+            .iter()
+            .copied()
+            .filter(|&j| polys[j].contains(&geo::Point(probe)))
+            .collect();
+        if containers.len().is_multiple_of(2) {
             outers.push((i, vec![]));
-        } else if let Some(&c) = containers.last() {
-            if let Some(o) = outers.iter_mut().find(|(oi, _)| *oi == c) {
-                o.1.push(polys[i].exterior().clone());
-            }
+        } else if let Some(&c) = containers.last()
+            && let Some(o) = outers.iter_mut().find(|(oi, _)| *oi == c)
+        {
+            o.1.push(polys[i].exterior().clone());
         }
     }
     Some(MultiPolygon(
-        outers.into_iter().map(|(i, holes)| Polygon::new(polys[i].exterior().clone(), holes)).collect(),
+        outers
+            .into_iter()
+            .map(|(i, holes)| Polygon::new(polys[i].exterior().clone(), holes))
+            .collect(),
     ))
 }
 
@@ -384,13 +452,32 @@ mod tests {
         assert!(walk_ok(&tags(&[("highway", "footway")])));
         assert!(!walk_ok(&tags(&[("highway", "motorway")])));
         assert!(!walk_ok(&tags(&[("highway", "busway")])));
-        assert!(!walk_ok(&tags(&[("highway", "residential"), ("foot", "no")])));
+        assert!(!walk_ok(&tags(&[
+            ("highway", "residential"),
+            ("foot", "no")
+        ])));
         assert!(!walk_ok(&tags(&[("highway", "trunk")])));
-        assert!(walk_ok(&tags(&[("highway", "trunk"), ("sidewalk", "both")])));
-        assert!(!walk_ok(&tags(&[("highway", "service"), ("access", "private")])));
-        assert!(walk_ok(&tags(&[("highway", "service"), ("access", "private"), ("foot", "yes")])));
-        assert!(!walk_ok(&tags(&[("highway", "residential"), ("sidewalk:left", "separate")])));
-        assert!(!walk_ok(&tags(&[("highway", "pedestrian"), ("area", "yes")])));
+        assert!(walk_ok(&tags(&[
+            ("highway", "trunk"),
+            ("sidewalk", "both")
+        ])));
+        assert!(!walk_ok(&tags(&[
+            ("highway", "service"),
+            ("access", "private")
+        ])));
+        assert!(walk_ok(&tags(&[
+            ("highway", "service"),
+            ("access", "private"),
+            ("foot", "yes")
+        ])));
+        assert!(!walk_ok(&tags(&[
+            ("highway", "residential"),
+            ("sidewalk:left", "separate")
+        ])));
+        assert!(!walk_ok(&tags(&[
+            ("highway", "pedestrian"),
+            ("area", "yes")
+        ])));
     }
 
     #[test]

@@ -97,7 +97,11 @@ impl Dsu {
 }
 
 pub fn build_network(osm: OsmData) -> Network {
-    let OsmData { ways, recintos, recintos_descartados } = osm;
+    let OsmData {
+        ways,
+        recintos,
+        recintos_descartados,
+    } = osm;
     // nodos compartidos: aparecen ≥ 2 veces en el total de vías (np.unique con return_counts)
     let mut cnt: HashMap<i64, u32> = HashMap::new();
     for w in &ways {
@@ -127,24 +131,32 @@ pub fn build_network(osm: OsmData) -> Network {
             eu.push(ids[a]);
             ev.push(ids[b]);
             ehw.push(h);
-            for k in a..=b {
-                coords.push([w.lonlat[k].0, w.lonlat[k].1]);
-            }
+            coords.extend(w.lonlat[a..=b].iter().map(|&(lo, la)| [lo, la]));
             off.push(off.last().unwrap() + (b - a + 1) as u64);
         }
     }
-    let xy: Vec<[f64; 2]> = coords.par_iter().map(|c| {
-        let (x, y) = to_utm(c[0], c[1]);
-        [x, y]
-    }).collect();
+    let xy: Vec<[f64; 2]> = coords
+        .par_iter()
+        .map(|c| {
+            let (x, y) = to_utm(c[0], c[1]);
+            [x, y]
+        })
+        .collect();
     let ne = eu.len();
-    let length: Vec<f64> = (0..ne).into_par_iter().map(|e| line_len(&xy[off[e] as usize..off[e + 1] as usize])).collect();
+    let length: Vec<f64> = (0..ne)
+        .into_par_iter()
+        .map(|e| line_len(&xy[off[e] as usize..off[e + 1] as usize]))
+        .collect();
     let keep0: Vec<bool> = (0..ne).map(|e| length[e] > 0.5 && eu[e] != ev[e]).collect();
     // np.unique(np.r_[eu, ev]) → índice denso ordenado por id de OSM
     let mut node_ids: Vec<i64> = eu.iter().chain(ev.iter()).copied().collect();
     node_ids.sort_unstable();
     node_ids.dedup();
-    let pos: HashMap<i64, u32> = node_ids.iter().enumerate().map(|(i, &id)| (id, i as u32)).collect();
+    let pos: HashMap<i64, u32> = node_ids
+        .iter()
+        .enumerate()
+        .map(|(i, &id)| (id, i as u32))
+        .collect();
     let ui: Vec<u32> = eu.iter().map(|id| pos[id]).collect();
     let vi: Vec<u32> = ev.iter().map(|id| pos[id]).collect();
     let mut nxy = vec![[0.0; 2]; node_ids.len()];
@@ -187,8 +199,14 @@ pub fn build_network(osm: OsmData) -> Network {
             nxy_new.push(nxy[i]);
         }
     }
-    let (mut u, mut v, mut len2, mut hw2, mut xy2, mut off2) =
-        (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), vec![0u64]);
+    let (mut u, mut v, mut len2, mut hw2, mut xy2, mut off2) = (
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        vec![0u64],
+    );
     for e in 0..ne {
         if keep0[e] && roots[ui[e] as usize] == big {
             u.push(remap[ui[e] as usize]);
@@ -224,7 +242,18 @@ pub fn build_network(osm: OsmData) -> Network {
         recintos_descartados,
         ..Default::default()
     };
-    Network { u, v, length: len2, off: off2, xy: xy2, nxy: nxy_new, hw: hw2, hw_names, recintos, stats }
+    Network {
+        u,
+        v,
+        length: len2,
+        off: off2,
+        xy: xy2,
+        nxy: nxy_new,
+        hw: hw2,
+        hw_names,
+        recintos,
+        stats,
+    }
 }
 
 // ---------- caché binaria ----------
@@ -248,11 +277,14 @@ fn cast_vec<T: bytemuck::Pod>(b: Vec<u8>) -> Vec<T> {
     bytemuck::pod_collect_to_vec(&b)
 }
 
+/// Anillo exterior y huecos de un polígono, en UTM.
+type PolySer = (Vec<[f64; 2]>, Vec<Vec<[f64; 2]>>);
+
 #[derive(Serialize, Deserialize)]
 struct RecintoSer {
     kind: String,
     name: String,
-    polys: Vec<(Vec<[f64; 2]>, Vec<Vec<[f64; 2]>>)>,
+    polys: Vec<PolySer>,
 }
 
 pub fn save_cache(net: &Network, path: &Path) -> Result<()> {
@@ -283,7 +315,8 @@ pub fn save_cache(net: &Network, path: &Path) -> Result<()> {
                 .0
                 .iter()
                 .map(|p| {
-                    let ring = |l: &LineString<f64>| l.0.iter().map(|c| [c.x, c.y]).collect::<Vec<_>>();
+                    let ring =
+                        |l: &LineString<f64>| l.0.iter().map(|c| [c.x, c.y]).collect::<Vec<_>>();
                     (ring(p.exterior()), p.interiors().iter().map(ring).collect())
                 })
                 .collect(),
@@ -319,21 +352,44 @@ pub fn load_cache(path: &Path) -> Result<Network> {
     let recintos = rec
         .into_iter()
         .map(|r| {
-            let ls = |v: Vec<[f64; 2]>| LineString::from(v.into_iter().map(|[x, y]| Coord { x, y }).collect::<Vec<_>>());
+            let ls = |v: Vec<[f64; 2]>| {
+                LineString::from(
+                    v.into_iter()
+                        .map(|[x, y]| Coord { x, y })
+                        .collect::<Vec<_>>(),
+                )
+            };
             Recinto {
                 kind: r.kind,
                 name: r.name,
                 geom: MultiPolygon(
-                    r.polys.into_iter().map(|(e, h)| Polygon::new(ls(e), h.into_iter().map(ls).collect())).collect(),
+                    r.polys
+                        .into_iter()
+                        .map(|(e, h)| Polygon::new(ls(e), h.into_iter().map(ls).collect()))
+                        .collect(),
                 ),
             }
         })
         .collect();
-    Ok(Network { u, v, length, off, xy, nxy, hw, hw_names, recintos, stats })
+    Ok(Network {
+        u,
+        v,
+        length,
+        off,
+        xy,
+        nxy,
+        hw,
+        hw_names,
+        recintos,
+        stats,
+    })
 }
 
 pub fn file_sha256(p: &Path) -> Result<String> {
-    let mut f = BufReader::with_capacity(1 << 20, std::fs::File::open(p).with_context(|| format!("abriendo {}", p.display()))?);
+    let mut f = BufReader::with_capacity(
+        1 << 20,
+        std::fs::File::open(p).with_context(|| format!("abriendo {}", p.display()))?,
+    );
     let mut h = Sha256::new();
     let mut buf = vec![0u8; 1 << 20];
     loop {
@@ -349,30 +405,52 @@ pub fn file_sha256(p: &Path) -> Result<String> {
 /// Por qué una caché no sirve para esta configuración, o `None` si sirve.
 pub fn stale_reason(stats: &Stats, cfg: &Settings) -> Option<String> {
     if stats.cache_version != CACHE_VERSION {
-        return Some(format!("cache_version {} ≠ {CACHE_VERSION}", stats.cache_version));
+        return Some(format!(
+            "cache_version {} ≠ {CACHE_VERSION}",
+            stats.cache_version
+        ));
     }
     if !cfg.pbf_sha256.is_empty() && stats.pbf_sha256 != cfg.pbf_sha256 {
-        return Some(format!("pbf_sha256 de la caché {:.12}… ≠ fijado {:.12}…", stats.pbf_sha256, cfg.pbf_sha256));
+        return Some(format!(
+            "pbf_sha256 de la caché {:.12}… ≠ fijado {:.12}…",
+            stats.pbf_sha256, cfg.pbf_sha256
+        ));
     }
     None
 }
 
 pub fn load_or_build(cfg: &Settings) -> Result<Network> {
+    load_or_build_with(cfg, |c| read_osm(&c.pbf_path, c.bbox, &c.recinto_tags))
+}
+
+/// Como `load_or_build`, con el lector de OSM inyectable (los tests lo reemplazan).
+pub fn load_or_build_with(
+    cfg: &Settings,
+    read: impl Fn(&Settings) -> Result<OsmData>,
+) -> Result<Network> {
     if cfg.graph_cache.exists() {
         match load_cache(&cfg.graph_cache) {
             Ok(net) => match stale_reason(&net.stats, cfg) {
                 None => return Ok(net),
                 Some(why) => tracing::warn!("reconstruyendo {}: {why}", cfg.graph_cache.display()),
             },
-            Err(e) => tracing::warn!("reconstruyendo {}: no se pudo leer ({e})", cfg.graph_cache.display()),
+            Err(e) => tracing::warn!(
+                "reconstruyendo {}: no se pudo leer ({e})",
+                cfg.graph_cache.display()
+            ),
         }
     }
     let t0 = Instant::now();
     let digest = file_sha256(&cfg.pbf_path)?;
     if !cfg.pbf_sha256.is_empty() && digest != cfg.pbf_sha256 {
-        bail!("sha256 de {} no coincide: {:.12}… ≠ {:.12}…", cfg.pbf_path.display(), digest, cfg.pbf_sha256);
+        bail!(
+            "sha256 de {} no coincide: {:.12}… ≠ {:.12}…",
+            cfg.pbf_path.display(),
+            digest,
+            cfg.pbf_sha256
+        );
     }
-    let osm = read_osm(&cfg.pbf_path, cfg.bbox, &cfg.recinto_tags)?;
+    let osm = read(cfg)?;
     let mut net = build_network(osm);
     net.stats.pbf_sha256 = digest;
     net.stats.cache_version = CACHE_VERSION;

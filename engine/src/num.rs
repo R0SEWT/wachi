@@ -18,7 +18,11 @@ pub fn percentile_sorted(v: &[f64], q: f64) -> f64 {
     let (a, b) = (v[lo], v[hi]);
     let d = b - a;
     // numpy._lerp: a + d·t, pero b − d·(1−t) cuando t ≥ 0.5 (más estable cerca de b)
-    if t >= 0.5 { b - d * (1.0 - t) } else { a + d * t }
+    if t >= 0.5 {
+        b - d * (1.0 - t)
+    } else {
+        a + d * t
+    }
 }
 
 /// `round(x)` de Python sobre float: al entero más cercano, empates al par.

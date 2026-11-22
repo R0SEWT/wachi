@@ -84,7 +84,10 @@ pub fn interpolate(c: &[[f64; 2]], d: f64) -> [f64; 2] {
         let l = seg_len(w[0], w[1]);
         if total + l > d {
             let frac = (d - total) / l;
-            return [w[0][0] + frac * (w[1][0] - w[0][0]), w[0][1] + frac * (w[1][1] - w[0][1])];
+            return [
+                w[0][0] + frac * (w[1][0] - w[0][0]),
+                w[0][1] + frac * (w[1][1] - w[0][1]),
+            ];
         }
         total += l;
     }
@@ -146,7 +149,11 @@ impl Router {
         let ne = net.n_edges();
         let step = cfg.step_m;
         // muestras cada ~step_m sobre cada arista: n = max(1, round(largo/step)) (redondeo al par)
-        let ns: Vec<u32> = net.length.iter().map(|&l| round_half_even(l / step).max(1.0) as u32).collect();
+        let ns: Vec<u32> = net
+            .length
+            .iter()
+            .map(|&l| round_half_even(l / step).max(1.0) as u32)
+            .collect();
         let mut first = vec![0usize; ne + 1];
         for e in 0..ne {
             first[e + 1] = first[e] + ns[e] as usize;
@@ -177,7 +184,11 @@ impl Router {
             .par_iter()
             .map(|r| {
                 let shrunk = r.geom.buffer(-cfg.recinto_shrink_m);
-                Recinto { shrunk_bb: shrunk.bounding_rect(), shrunk, orig_bb: r.geom.bounding_rect() }
+                Recinto {
+                    shrunk_bb: shrunk.bounding_rect(),
+                    shrunk,
+                    orig_bb: r.geom.bounding_rect(),
+                }
             })
             .collect();
         let mut edge_poly = vec![-1i32; ne];
@@ -190,7 +201,10 @@ impl Router {
                         // primer recinto (menor índice) que contiene la muestra
                         let hit = recintos.iter().position(|rc| {
                             rc.shrunk_bb.is_some_and(|b| {
-                                p[0] > b.min().x && p[0] < b.max().x && p[1] > b.min().y && p[1] < b.max().y
+                                p[0] > b.min().x
+                                    && p[0] < b.max().x
+                                    && p[1] > b.min().y
+                                    && p[1] < b.max().y
                             }) && rc.shrunk.contains(&Point::new(p[0], p[1]))
                         });
                         if let Some(i) = hit {
@@ -200,7 +214,10 @@ impl Router {
                             }
                         }
                     }
-                    match counts.iter().max_by(|a, b| a.1.cmp(&b.1).then(b.0.cmp(&a.0))) {
+                    match counts
+                        .iter()
+                        .max_by(|a, b| a.1.cmp(&b.1).then(b.0.cmp(&a.0)))
+                    {
                         Some(&(pi, k)) if k as f64 >= 0.5 * ns[e] as f64 => pi,
                         _ => -1,
                     }
@@ -233,17 +250,36 @@ impl Router {
             fill[v as usize] += 1;
         }
         let node_grid = Grid::new(&net.nxy, 100.0);
-        Router { net, surf, cfg, rbar, p75, edge_poly, recintos, node_grid, adj_start, adj }
+        Router {
+            net,
+            surf,
+            cfg,
+            rbar,
+            p75,
+            edge_poly,
+            recintos,
+            node_grid,
+            adj_start,
+            adj,
+        }
     }
 
     pub fn n_samples_hint(&self) -> usize {
-        self.net.length.iter().map(|&l| round_half_even(l / self.cfg.step_m).max(1.0) as usize).sum()
+        self.net
+            .length
+            .iter()
+            .map(|&l| round_half_even(l / self.cfg.step_m).max(1.0) as usize)
+            .sum()
     }
 
     #[inline]
     pub fn weight(&self, e: usize, beta: f64) -> f64 {
         let l = self.net.length[e];
-        let w = if beta != 0.0 { l * (1.0 + beta * self.rbar[e]) } else { l };
+        let w = if beta != 0.0 {
+            l * (1.0 + beta * self.rbar[e])
+        } else {
+            l
+        };
         w.max(1e-3)
     }
 
@@ -253,8 +289,9 @@ impl Router {
         for &n in nodes {
             let [x, y] = self.net.nxy[n as usize];
             for (i, (rc, r)) in self.recintos.iter().zip(&self.net.recintos).enumerate() {
-                if rc.orig_bb.is_some_and(|b| x >= b.min().x && x <= b.max().x && y >= b.min().y && y <= b.max().y)
-                    && r.geom.contains(&Point::new(x, y))
+                if rc.orig_bb.is_some_and(|b| {
+                    x >= b.min().x && x <= b.max().x && y >= b.min().y && y <= b.max().y
+                }) && r.geom.contains(&Point::new(x, y))
                 {
                     out.insert(i as i32);
                 }
@@ -265,11 +302,22 @@ impl Router {
 
     /// Camino de menor costo; `allowed` son los recintos por los que sí se puede pasar
     /// (`None`: ninguno bloqueado). `None` si no hay camino.
-    pub fn route(&self, src: u32, dst: u32, beta: f64, allowed: Option<&HashSet<i32>>) -> Option<Route> {
+    pub fn route(
+        &self,
+        src: u32,
+        dst: u32,
+        beta: f64,
+        allowed: Option<&HashSet<i32>>,
+    ) -> Option<Route> {
         let nxy = &self.net.nxy;
         if src == dst {
             let p = nxy[src as usize];
-            return Some(Route { nodes: vec![src], edges: vec![], xy: vec![p, p], length_m: 0.0 });
+            return Some(Route {
+                nodes: vec![src],
+                edges: vec![],
+                xy: vec![p, p],
+                length_m: 0.0,
+            });
         }
         let blocked = |e: usize| {
             let p = self.edge_poly[e];
@@ -285,7 +333,13 @@ impl Router {
             let mut s = s.borrow_mut();
             let nn = nxy.len();
             if s.stamp.len() != nn {
-                *s = Scratch { dist: vec![0.0; nn], pred: vec![0; nn], stamp: vec![0; nn], done: vec![0; nn], epoch: 0 };
+                *s = Scratch {
+                    dist: vec![0.0; nn],
+                    pred: vec![0; nn],
+                    stamp: vec![0; nn],
+                    done: vec![0; nn],
+                    epoch: 0,
+                };
             }
             s.epoch = s.epoch.wrapping_add(1);
             if s.epoch == 0 {
@@ -294,7 +348,13 @@ impl Router {
                 s.epoch = 1;
             }
             let g = s.epoch;
-            let Scratch { dist, pred, stamp, done, .. } = &mut *s;
+            let Scratch {
+                dist,
+                pred,
+                stamp,
+                done,
+                ..
+            } = &mut *s;
             let mut heap = BinaryHeap::new();
             dist[src as usize] = 0.0;
             stamp[src as usize] = g;
@@ -311,7 +371,9 @@ impl Router {
                     break;
                 }
                 let dn = dist[ni];
-                for &(e, m) in &self.adj[self.adj_start[ni] as usize..self.adj_start[ni + 1] as usize] {
+                for &(e, m) in
+                    &self.adj[self.adj_start[ni] as usize..self.adj_start[ni + 1] as usize]
+                {
                     let mi = m as usize;
                     if done[mi] == g || blocked(e as usize) {
                         continue;
@@ -345,20 +407,35 @@ impl Router {
                 let c = self.net.edge_xy(e as usize);
                 let a = nodes[k];
                 let fwd = self.net.u[e as usize] == a;
-                let it: Box<dyn Iterator<Item = &[f64; 2]>> =
-                    if fwd { Box::new(c.iter()) } else { Box::new(c.iter().rev()) };
+                let it: Box<dyn Iterator<Item = &[f64; 2]>> = if fwd {
+                    Box::new(c.iter())
+                } else {
+                    Box::new(c.iter().rev())
+                };
                 xy.extend(it.skip(if k == 0 { 0 } else { 1 }));
             }
             let lens: Vec<f64> = edges.iter().map(|&e| self.net.length[e as usize]).collect();
-            Some(Route { nodes, edges, xy, length_m: np_sum(&lens) })
+            Some(Route {
+                nodes,
+                edges,
+                xy,
+                length_m: np_sum(&lens),
+            })
         })
     }
 
     /// Exposición: Σ S150·tramo/1000 muestreando cada step_m sobre la ruta (ADR 003).
     pub fn measure(&self, r: &Route) -> Measure {
-        let cells: Vec<Option<CellIndex>> = r.xy.iter().map(|p| self.surf.cell_utm(p[0], p[1])).collect();
+        let cells: Vec<Option<CellIndex>> =
+            r.xy.iter()
+                .map(|p| self.surf.cell_utm(p[0], p[1]))
+                .collect();
         if r.length_m == 0.0 {
-            return Measure { length_m: 0.0, exposure: 0.0, cells };
+            return Measure {
+                length_m: 0.0,
+                exposure: 0.0,
+                cells,
+            };
         }
         let l = polyline_len(&r.xy);
         let step = self.cfg.step_m;
@@ -371,7 +448,11 @@ impl Router {
                 self.surf.s150(p[0], p[1]) * seg / 1000.0
             })
             .collect();
-        Measure { length_m: l, exposure: np_sum(&terms), cells }
+        Measure {
+            length_m: l,
+            exposure: np_sum(&terms),
+            cells,
+        }
     }
 
     pub fn snap(&self, x: f64, y: f64) -> Option<(u32, f64)> {
@@ -386,12 +467,16 @@ mod tests {
     #[test]
     fn suma_por_pares_de_numpy() {
         // valores sacados de numpy 2.x donde np.sum ≠ suma secuencial
-        let f = |n: usize, g: &dyn Fn(f64) -> f64| (0..n).map(|i| g(i as f64)).collect::<Vec<f64>>();
+        let f =
+            |n: usize, g: &dyn Fn(f64) -> f64| (0..n).map(|i| g(i as f64)).collect::<Vec<f64>>();
         assert_eq!(np_sum(&f(37, &|i| 0.1 * i + 1e-3)), 66.637);
         assert_eq!(np_sum(&f(130, &|i| 1.0 / (i + 1.0))), 5.4485913382659765);
         assert_eq!(np_sum(&f(300, &|i| 0.1 * i + 1e-3)), 4485.3);
         assert_eq!(np_sum(&f(1000, &|i| 1.0 / (i + 1.0))), 7.485470860550345);
-        assert_eq!(np_sum(&f(1000, &|i| (i % 7.0) * 0.3 + 1.0 / (i + 3.0))), 905.0874678655413);
+        assert_eq!(
+            np_sum(&f(1000, &|i| (i % 7.0) * 0.3 + 1.0 / (i + 3.0))),
+            905.0874678655413
+        );
         assert_eq!(np_sum(&[1.0, 2.0, 3.0]), 6.0);
     }
 

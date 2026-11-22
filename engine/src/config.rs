@@ -56,12 +56,19 @@ impl Default for Settings {
             low_data_pct: 10.0,
             snap_max_m: 300.0,
             recinto_shrink_m: 5.0,
-            recinto_tags: [("amenity", "hospital"), ("amenity", "university"), ("landuse", "cemetery"),
-                ("landuse", "military")]
-                .iter()
-                .map(|(k, v)| (k.to_string(), v.to_string()))
-                .collect(),
-            cors_origins: vec!["http://localhost:8080".into(), "http://127.0.0.1:8080".into()],
+            recinto_tags: [
+                ("amenity", "hospital"),
+                ("amenity", "university"),
+                ("landuse", "cemetery"),
+                ("landuse", "military"),
+            ]
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect(),
+            cors_origins: vec![
+                "http://localhost:8080".into(),
+                "http://127.0.0.1:8080".into(),
+            ],
         }
     }
 }
@@ -90,31 +97,74 @@ impl Settings {
         let mut s = Settings::default();
         let get = |name: &str| vars.get(&format!("wachi_{name}"));
         fn num<T: std::str::FromStr>(name: &str, v: &str) -> Result<T> {
-            v.trim().parse().map_err(|_| anyhow::anyhow!("WACHI_{} inválido: {v:?}", name.to_uppercase()))
+            v.trim()
+                .parse()
+                .map_err(|_| anyhow::anyhow!("WACHI_{} inválido: {v:?}", name.to_uppercase()))
         }
         fn json<T: DeserializeOwned>(name: &str, v: &str) -> Result<T> {
-            serde_json::from_str(v).with_context(|| format!("WACHI_{} no es JSON válido", name.to_uppercase()))
+            serde_json::from_str(v)
+                .with_context(|| format!("WACHI_{} no es JSON válido", name.to_uppercase()))
         }
-        if let Some(v) = get("pbf_path") { s.pbf_path = v.into(); }
-        if let Some(v) = get("pbf_sha256") { s.pbf_sha256 = v.clone(); }
-        if let Some(v) = get("events_path") { s.events_path = v.into(); }
-        if let Some(v) = get("events_sha256") { s.events_sha256 = v.clone(); }
-        if let Some(v) = get("graph_cache_rs") { s.graph_cache = v.into(); }
-        if let Some(v) = get("bbox") { s.bbox = json("bbox", v)?; }
-        if let Some(v) = get("radius_m") { s.radius_m = num("radius_m", v)?; }
-        if let Some(v) = get("step_m") { s.step_m = num("step_m", v)?; }
-        if let Some(v) = get("h3_res") { s.h3_res = num("h3_res", v)?; }
-        if let Some(v) = get("walk_kmh") { s.walk_kmh = num("walk_kmh", v)?; }
-        if let Some(v) = get("betas") { s.betas = json("betas", v)?; }
-        if let Some(v) = get("cap_pct") { s.cap_pct = num("cap_pct", v)?; }
-        if let Some(v) = get("cap_min") { s.cap_min = num("cap_min", v)?; }
-        if let Some(v) = get("gain_min") { s.gain_min = num("gain_min", v)?; }
-        if let Some(v) = get("block_min_events") { s.block_min_events = num("block_min_events", v)?; }
-        if let Some(v) = get("low_data_pct") { s.low_data_pct = num("low_data_pct", v)?; }
-        if let Some(v) = get("snap_max_m") { s.snap_max_m = num("snap_max_m", v)?; }
-        if let Some(v) = get("recinto_shrink_m") { s.recinto_shrink_m = num("recinto_shrink_m", v)?; }
-        if let Some(v) = get("recinto_tags") { s.recinto_tags = json("recinto_tags", v)?; }
-        if let Some(v) = get("cors_origins") { s.cors_origins = json("cors_origins", v)?; }
+        if let Some(v) = get("pbf_path") {
+            s.pbf_path = v.into();
+        }
+        if let Some(v) = get("pbf_sha256") {
+            s.pbf_sha256 = v.clone();
+        }
+        if let Some(v) = get("events_path") {
+            s.events_path = v.into();
+        }
+        if let Some(v) = get("events_sha256") {
+            s.events_sha256 = v.clone();
+        }
+        if let Some(v) = get("graph_cache_rs") {
+            s.graph_cache = v.into();
+        }
+        if let Some(v) = get("bbox") {
+            s.bbox = json("bbox", v)?;
+        }
+        if let Some(v) = get("radius_m") {
+            s.radius_m = num("radius_m", v)?;
+        }
+        if let Some(v) = get("step_m") {
+            s.step_m = num("step_m", v)?;
+        }
+        if let Some(v) = get("h3_res") {
+            s.h3_res = num("h3_res", v)?;
+        }
+        if let Some(v) = get("walk_kmh") {
+            s.walk_kmh = num("walk_kmh", v)?;
+        }
+        if let Some(v) = get("betas") {
+            s.betas = json("betas", v)?;
+        }
+        if let Some(v) = get("cap_pct") {
+            s.cap_pct = num("cap_pct", v)?;
+        }
+        if let Some(v) = get("cap_min") {
+            s.cap_min = num("cap_min", v)?;
+        }
+        if let Some(v) = get("gain_min") {
+            s.gain_min = num("gain_min", v)?;
+        }
+        if let Some(v) = get("block_min_events") {
+            s.block_min_events = num("block_min_events", v)?;
+        }
+        if let Some(v) = get("low_data_pct") {
+            s.low_data_pct = num("low_data_pct", v)?;
+        }
+        if let Some(v) = get("snap_max_m") {
+            s.snap_max_m = num("snap_max_m", v)?;
+        }
+        if let Some(v) = get("recinto_shrink_m") {
+            s.recinto_shrink_m = num("recinto_shrink_m", v)?;
+        }
+        if let Some(v) = get("recinto_tags") {
+            s.recinto_tags = json("recinto_tags", v)?;
+        }
+        if let Some(v) = get("cors_origins") {
+            s.cors_origins = json("cors_origins", v)?;
+        }
         if s.betas.is_empty() {
             bail!("WACHI_BETAS no puede estar vacío: la Tranquila sale del primer β");
         }

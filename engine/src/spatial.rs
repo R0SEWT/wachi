@@ -16,7 +16,16 @@ impl Grid {
     pub fn new(points: &[[f64; 2]], cell: f64) -> Grid {
         assert!(cell > 0.0);
         if points.is_empty() {
-            return Grid { x0: 0.0, y0: 0.0, cell, nx: 1, ny: 1, start: vec![0, 0], pts: vec![], ids: vec![] };
+            return Grid {
+                x0: 0.0,
+                y0: 0.0,
+                cell,
+                nx: 1,
+                ny: 1,
+                start: vec![0, 0],
+                pts: vec![],
+                ids: vec![],
+            };
         }
         let (mut x0, mut y0, mut x1, mut y1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
         for p in points {
@@ -50,7 +59,16 @@ impl Grid {
             ids[at] = i as u32;
             fill[k] += 1;
         }
-        Grid { x0, y0, cell, nx, ny, start, pts, ids }
+        Grid {
+            x0,
+            y0,
+            cell,
+            nx,
+            ny,
+            start,
+            pts,
+            ids,
+        }
     }
 
     fn range(&self, lo: f64, hi: f64, origin: f64, n: usize) -> Option<(usize, usize)> {
@@ -65,15 +83,19 @@ impl Grid {
     /// Cantidad de puntos a distancia ≤ r (como `cKDTree.query_ball_point(..., return_length=True)`).
     pub fn count_within(&self, x: f64, y: f64, r: f64) -> u32 {
         let r2 = r * r;
-        let (Some((cx0, cx1)), Some((cy0, cy1))) =
-            (self.range(x - r, x + r, self.x0, self.nx), self.range(y - r, y + r, self.y0, self.ny))
-        else {
+        let (Some((cx0, cx1)), Some((cy0, cy1))) = (
+            self.range(x - r, x + r, self.x0, self.nx),
+            self.range(y - r, y + r, self.y0, self.ny),
+        ) else {
             return 0;
         };
         let mut n = 0;
         for cy in cy0..=cy1 {
             let row = cy * self.nx;
-            let (s, e) = (self.start[row + cx0] as usize, self.start[row + cx1 + 1] as usize);
+            let (s, e) = (
+                self.start[row + cx0] as usize,
+                self.start[row + cx1 + 1] as usize,
+            );
             for p in &self.pts[s..e] {
                 let (dx, dy) = (p[0] - x, p[1] - y);
                 if dx * dx + dy * dy <= r2 {
@@ -134,18 +156,25 @@ mod tests {
     use super::*;
 
     fn lcg(seed: &mut u64) -> f64 {
-        *seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        *seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         (*seed >> 11) as f64 / (1u64 << 53) as f64
     }
 
     #[test]
     fn igual_que_fuerza_bruta() {
         let mut s = 42;
-        let pts: Vec<[f64; 2]> = (0..3000).map(|_| [lcg(&mut s) * 5000.0, lcg(&mut s) * 3000.0]).collect();
+        let pts: Vec<[f64; 2]> = (0..3000)
+            .map(|_| [lcg(&mut s) * 5000.0, lcg(&mut s) * 3000.0])
+            .collect();
         let g = Grid::new(&pts, 150.0);
         for _ in 0..300 {
             let (x, y) = (lcg(&mut s) * 7000.0 - 1000.0, lcg(&mut s) * 5000.0 - 1000.0);
-            let bf = pts.iter().filter(|p| (p[0] - x).powi(2) + (p[1] - y).powi(2) <= 150.0f64.powi(2)).count();
+            let bf = pts
+                .iter()
+                .filter(|p| (p[0] - x).powi(2) + (p[1] - y).powi(2) <= 150.0f64.powi(2))
+                .count();
             assert_eq!(g.count_within(x, y, 150.0) as usize, bf);
             let (bi, bd) = pts
                 .iter()

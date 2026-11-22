@@ -47,7 +47,11 @@ pub fn civil_from_days(z: i64) -> (i64, i64, i64) {
 
 fn parse_day(s: &str) -> Option<i64> {
     let s = s.trim();
-    let (y, m, d) = (s.get(0..4)?.parse().ok()?, s.get(5..7)?.parse().ok()?, s.get(8..10)?.parse().ok()?);
+    let (y, m, d) = (
+        s.get(0..4)?.parse().ok()?,
+        s.get(5..7)?.parse().ok()?,
+        s.get(8..10)?.parse().ok()?,
+    );
     Some(days_from_civil(y, m, d))
 }
 
@@ -67,23 +71,45 @@ fn column_days(fe: &dyn Array) -> Result<Vec<Option<i64>>> {
             let k = per_day(unit);
             let raw = arrow::compute::cast(fe, &DataType::Int64)?;
             let raw = raw.as_primitive::<arrow::datatypes::Int64Type>();
-            (0..n).map(|i| (!raw.is_null(i)).then(|| raw.value(i).div_euclid(k))).collect()
+            (0..n)
+                .map(|i| (!raw.is_null(i)).then(|| raw.value(i).div_euclid(k)))
+                .collect()
         }
         DataType::Date32 => {
             let a = fe.as_primitive::<arrow::datatypes::Date32Type>();
-            (0..n).map(|i| (!a.is_null(i)).then(|| a.value(i) as i64)).collect()
+            (0..n)
+                .map(|i| (!a.is_null(i)).then(|| a.value(i) as i64))
+                .collect()
         }
         DataType::Date64 => {
             let a = fe.as_primitive::<arrow::datatypes::Date64Type>();
-            (0..n).map(|i| (!a.is_null(i)).then(|| a.value(i).div_euclid(86_400_000))).collect()
+            (0..n)
+                .map(|i| (!a.is_null(i)).then(|| a.value(i).div_euclid(86_400_000)))
+                .collect()
         }
         DataType::Utf8 => {
             let a = fe.as_string::<i32>();
-            (0..n).map(|i| if a.is_null(i) { None } else { parse_day(a.value(i)) }).collect()
+            (0..n)
+                .map(|i| {
+                    if a.is_null(i) {
+                        None
+                    } else {
+                        parse_day(a.value(i))
+                    }
+                })
+                .collect()
         }
         DataType::LargeUtf8 => {
             let a = fe.as_string::<i64>();
-            (0..n).map(|i| if a.is_null(i) { None } else { parse_day(a.value(i)) }).collect()
+            (0..n)
+                .map(|i| {
+                    if a.is_null(i) {
+                        None
+                    } else {
+                        parse_day(a.value(i))
+                    }
+                })
+                .collect()
         }
         t => bail!("fecha de tipo {t} no soportado"),
     })
@@ -93,7 +119,12 @@ pub fn load_events(path: &Path, sha256: &str) -> Result<Events> {
     if !sha256.is_empty() {
         let digest = crate::network::file_sha256(path)?;
         if digest != sha256 {
-            bail!("sha256 de {} no coincide: {:.12}… ≠ {:.12}…", path.display(), digest, sha256);
+            bail!(
+                "sha256 de {} no coincide: {:.12}… ≠ {:.12}…",
+                path.display(),
+                digest,
+                sha256
+            );
         }
     }
     let f = std::fs::File::open(path).with_context(|| format!("abriendo {}", path.display()))?;
@@ -111,10 +142,19 @@ pub fn load_events(path: &Path, sha256: &str) -> Result<Events> {
         .collect::<Result<_>>()?;
     let mask = ProjectionMask::roots(schema, idx);
     let reader = b.with_projection(mask).build()?;
-    let mut ev = Events { lat: vec![], lon: vec![], day: vec![] };
+    let mut ev = Events {
+        lat: vec![],
+        lon: vec![],
+        day: vec![],
+    };
     for batch in reader {
         let batch = batch?;
-        let col = |name: &str| batch.column_by_name(name).cloned().with_context(|| format!("falta {name}"));
+        let col = |name: &str| {
+            batch
+                .column_by_name(name)
+                .cloned()
+                .with_context(|| format!("falta {name}"))
+        };
         let float = |a: &dyn Array, i: usize| -> Option<f64> {
             if a.is_null(i) {
                 return None;
@@ -130,14 +170,16 @@ pub fn load_events(path: &Path, sha256: &str) -> Result<Events> {
             bail!("lat debe ser float, es {}", la.data_type());
         }
         let days = column_days(fe.as_ref())?;
-        for i in 0..batch.num_rows() {
-            let (Some(lat), Some(lon)) = (float(la.as_ref(), i), float(lo.as_ref(), i)) else { continue };
+        for (i, d) in days.iter().enumerate() {
+            let (Some(lat), Some(lon)) = (float(la.as_ref(), i), float(lo.as_ref(), i)) else {
+                continue;
+            };
             if lat.is_nan() || lon.is_nan() {
                 continue; // dropna
             }
             ev.lat.push(lat);
             ev.lon.push(lon);
-            ev.day.push(days[i].unwrap_or(i64::MIN));
+            ev.day.push(d.unwrap_or(i64::MIN));
         }
     }
     Ok(ev)
@@ -167,14 +209,20 @@ impl Surface {
                 [x, y]
             })
             .collect();
-        let cells: Vec<Option<CellIndex>> =
-            (0..ev.lat.len()).into_par_iter().map(|i| cell_of(ev.lat[i], ev.lon[i], res)).collect();
+        let cells: Vec<Option<CellIndex>> = (0..ev.lat.len())
+            .into_par_iter()
+            .map(|i| cell_of(ev.lat[i], ev.lon[i], res))
+            .collect();
         let mut s8: HashMap<CellIndex, u32> = HashMap::new();
         for c in cells.into_iter().flatten() {
             *s8.entry(c).or_default() += 1;
         }
         let counts: Vec<f64> = s8.values().map(|&v| v as f64).collect();
-        let low = if counts.is_empty() { 1.0 } else { percentile(&counts, cfg.low_data_pct) };
+        let low = if counts.is_empty() {
+            1.0
+        } else {
+            percentile(&counts, cfg.low_data_pct)
+        };
         let low = low.max(1.0); // una celda sin ningún evento siempre es "pocos datos"
         let data_as_of = ev
             .day
@@ -225,6 +273,9 @@ mod tests {
             assert_eq!(days_from_civil(y, m, dd), d);
         }
         assert_eq!(civil_from_days(days_from_civil(2025, 6, 30)), (2025, 6, 30));
-        assert_eq!(parse_day("2024-04-30T10:00:00"), Some(days_from_civil(2024, 4, 30)));
+        assert_eq!(
+            parse_day("2024-04-30T10:00:00"),
+            Some(days_from_civil(2024, 4, 30))
+        );
     }
 }

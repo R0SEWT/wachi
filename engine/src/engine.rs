@@ -48,11 +48,19 @@ pub fn select<'a>(
     cands: &'a [(Route, Measure)],
     cfg: &Settings,
 ) -> Selection<'a> {
-    let none = Selection { fast, fast_m, calm: None, reduction: 0.0, detour_m: 0.0 };
+    let none = Selection {
+        fast,
+        fast_m,
+        calm: None,
+        reduction: 0.0,
+        detour_m: 0.0,
+    };
     let l0 = fast.length_m;
     let cap = (l0 * (1.0 + cfg.cap_pct)).min(l0 + cfg.cap_min * cfg.walk_m_per_min());
-    let ok: Vec<&(Route, Measure)> =
-        cands.iter().filter(|(r, _)| r.length_m <= cap + 1e-6 && r.edges != fast.edges).collect();
+    let ok: Vec<&(Route, Measure)> = cands
+        .iter()
+        .filter(|(r, _)| r.length_m <= cap + 1e-6 && r.edges != fast.edges)
+        .collect();
     if ok.is_empty() || fast_m.exposure <= 0.0 {
         return none;
     }
@@ -127,10 +135,8 @@ fn low_data_segments(m: &Measure, surf: &Surface) -> Vec<[usize; 2]> {
         if low && start.is_none() {
             start = Some(i);
         }
-        if !low {
-            if let Some(s) = start.take() {
-                out.push([s, i - 1]);
-            }
+        if !low && let Some(s) = start.take() {
+            out.push([s, i - 1]);
         }
     }
     if let Some(s) = start {
@@ -209,12 +215,18 @@ impl Engine {
         }
     }
 
-    pub fn route(&self, origin: (f64, f64), destination: (f64, f64)) -> Result<Response, RouteError> {
+    pub fn route(
+        &self,
+        origin: (f64, f64),
+        destination: (f64, f64),
+    ) -> Result<Response, RouteError> {
         let a = self.snap(origin.0, origin.1, "origin")?;
         let b = self.snap(destination.0, destination.1, "destination")?;
         let r = &self.router;
         let allowed = r.allowed_polys(&[a, b]);
-        let fast = r.route(a, b, 0.0, Some(&allowed)).ok_or(RouteError::SinRuta)?;
+        let fast = r
+            .route(a, b, 0.0, Some(&allowed))
+            .ok_or(RouteError::SinRuta)?;
         let cands: Vec<(Route, Measure)> = r
             .cfg
             .betas
@@ -239,9 +251,15 @@ pub fn load_engine(cfg: &Settings) -> Result<Engine> {
     let surf = Surface::build(&ev, cfg)?;
     tracing::info!(
         "eventos: {}, data_as_of={}, umbral pocos datos={:.1}",
-        surf.n_events, surf.data_as_of, surf.low_threshold
+        surf.n_events,
+        surf.data_as_of,
+        surf.low_threshold
     );
     let router = Router::new(net, surf, cfg.clone());
-    tracing::info!("motor listo en {:.1}s (p75 S150 = {:.2})", t0.elapsed().as_secs_f64(), router.p75);
+    tracing::info!(
+        "motor listo en {:.1}s (p75 S150 = {:.2})",
+        t0.elapsed().as_secs_f64(),
+        router.p75
+    );
     Ok(Engine { router })
 }

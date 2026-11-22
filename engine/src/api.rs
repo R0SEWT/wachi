@@ -24,7 +24,10 @@ fn err(code: StatusCode, body: Value) -> Response {
 
 async fn health(State(st): State<AppState>) -> Response {
     match st.engine.get() {
-        None => err(StatusCode::SERVICE_UNAVAILABLE, json!({"status": "iniciando"})),
+        None => err(
+            StatusCode::SERVICE_UNAVAILABLE,
+            json!({"status": "iniciando"}),
+        ),
         Some(e) => Json(json!({
             "status": "ok",
             "nodes": e.router.net.n_nodes(),
@@ -58,10 +61,16 @@ pub fn parse_body(body: &[u8]) -> Option<((f64, f64), (f64, f64))> {
 
 async fn route(State(st): State<AppState>, body: Bytes) -> Response {
     let Some(eng) = st.engine.get().cloned() else {
-        return err(StatusCode::SERVICE_UNAVAILABLE, json!({"error": "iniciando"}));
+        return err(
+            StatusCode::SERVICE_UNAVAILABLE,
+            json!({"error": "iniciando"}),
+        );
     };
     let Some((o, d)) = parse_body(&body) else {
-        return err(StatusCode::UNPROCESSABLE_ENTITY, json!({"error": "peticion_invalida"}));
+        return err(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            json!({"error": "peticion_invalida"}),
+        );
     };
     match tokio::task::spawn_blocking(move || eng.route(o, d)).await {
         Ok(Ok(resp)) => Json(resp).into_response(),
@@ -72,7 +81,10 @@ async fn route(State(st): State<AppState>, body: Bytes) -> Response {
             }
             err(StatusCode::UNPROCESSABLE_ENTITY, b)
         }
-        Err(_) => err(StatusCode::INTERNAL_SERVER_ERROR, json!({"error": "interno"})),
+        Err(_) => err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            json!({"error": "interno"}),
+        ),
     }
 }
 
@@ -81,7 +93,11 @@ async fn fallback() -> Response {
 }
 
 pub fn app(st: AppState, cfg: &Settings, max_concurrency: usize) -> AxRouter {
-    let origins: Vec<HeaderValue> = cfg.cors_origins.iter().filter_map(|o| o.parse().ok()).collect();
+    let origins: Vec<HeaderValue> = cfg
+        .cors_origins
+        .iter()
+        .filter_map(|o| o.parse().ok())
+        .collect();
     let cors = CorsLayer::new()
         .allow_origin(origins)
         .allow_methods([Method::GET, Method::POST])
@@ -94,9 +110,11 @@ pub fn app(st: AppState, cfg: &Settings, max_concurrency: usize) -> AxRouter {
         .layer(
             ServiceBuilder::new()
                 // más de `max_concurrency` peticiones a la vez reciben 503 en vez de encolarse
-                .layer(axum::error_handling::HandleErrorLayer::new(|_: tower::BoxError| async {
-                    err(StatusCode::SERVICE_UNAVAILABLE, json!({"error": "ocupado"}))
-                }))
+                .layer(axum::error_handling::HandleErrorLayer::new(
+                    |_: tower::BoxError| async {
+                        err(StatusCode::SERVICE_UNAVAILABLE, json!({"error": "ocupado"}))
+                    },
+                ))
                 .load_shed()
                 .concurrency_limit(max_concurrency),
         )
@@ -114,13 +132,25 @@ mod tests {
 
     #[test]
     fn cuerpos_invalidos() {
-        let ok = br#"{"origin":{"lat":-12.08,"lon":-77.03},"destination":{"lat":-12.0,"lon":-77.0}}"#;
+        let ok =
+            br#"{"origin":{"lat":-12.08,"lon":-77.03},"destination":{"lat":-12.0,"lon":-77.0}}"#;
         assert!(parse_body(ok).is_some());
         assert!(parse_body(br#"{"origin":{"lat":1}}"#).is_none());
         assert!(parse_body(br#"{no es json"#).is_none());
-        assert!(parse_body(br#"{"origin":{"lat":NaN,"lon":-77.03},"destination":{"lat":-12.0,"lon":-77.0}}"#).is_none());
-        assert!(parse_body(br#"{"origin":{"lat":91,"lon":-77.03},"destination":{"lat":-12.0,"lon":-77.0}}"#).is_none());
-        let s = br#"{"origin":{"lat":"-12.08","lon":-77.03},"destination":{"lat":-12.0,"lon":-77.0}}"#;
+        assert!(
+            parse_body(
+                br#"{"origin":{"lat":NaN,"lon":-77.03},"destination":{"lat":-12.0,"lon":-77.0}}"#
+            )
+            .is_none()
+        );
+        assert!(
+            parse_body(
+                br#"{"origin":{"lat":91,"lon":-77.03},"destination":{"lat":-12.0,"lon":-77.0}}"#
+            )
+            .is_none()
+        );
+        let s =
+            br#"{"origin":{"lat":"-12.08","lon":-77.03},"destination":{"lat":-12.0,"lon":-77.0}}"#;
         assert_eq!(parse_body(s).unwrap().0, (-12.08, -77.03));
     }
 }

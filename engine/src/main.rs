@@ -6,16 +6,7 @@
 //!
 //! Lee la configuración de `WACHI_*` y de `.env` (ver `config.rs`), igual que la API en Python.
 
-mod api;
-mod config;
-mod engine;
-mod geo_utm;
-mod network;
-mod num;
-mod osm;
-mod router;
-mod spatial;
-mod surface;
+use wachi_engine::{api, config, engine, network, num};
 
 use anyhow::{Context, Result, bail};
 use config::Settings;
@@ -47,7 +38,9 @@ fn main() -> Result<()> {
         Some("prepare") => prepare(cfg),
         Some("batch") if args.len() >= 4 => batch(cfg, &args[2], &args[3]),
         _ => {
-            eprintln!("uso: wachi serve [--host H] [--port P] [--max-concurrency N] | prepare | batch PARES SALIDA");
+            eprintln!(
+                "uso: wachi serve [--host H] [--port P] [--max-concurrency N] | prepare | batch PARES SALIDA"
+            );
             std::process::exit(2);
         }
     }
@@ -63,17 +56,21 @@ fn serve(cfg: Settings, args: &[String]) -> Result<()> {
     {
         let slot = slot.clone();
         let cfg = cfg.clone();
-        std::thread::Builder::new().name("wachi-load".into()).spawn(move || match engine::load_engine(&cfg) {
-            Ok(e) => {
-                let _ = slot.set(Arc::new(e));
-            }
-            Err(e) => {
-                tracing::error!("no se pudo cargar el motor: {e:#}");
-                std::process::exit(1);
-            }
-        })?;
+        std::thread::Builder::new()
+            .name("wachi-load".into())
+            .spawn(move || match engine::load_engine(&cfg) {
+                Ok(e) => {
+                    let _ = slot.set(Arc::new(e));
+                }
+                Err(e) => {
+                    tracing::error!("no se pudo cargar el motor: {e:#}");
+                    std::process::exit(1);
+                }
+            })?;
     }
-    let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build()?;
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?;
     rt.block_on(async move {
         let app = api::app(api::AppState { engine: slot }, &cfg, maxc);
         let listener = tokio::net::TcpListener::bind((host.as_str(), port)).await?;
@@ -94,7 +91,10 @@ fn prepare(cfg: Settings) -> Result<()> {
         }
     }
     println!("WACHI_PBF_SHA256={}", network::file_sha256(&cfg.pbf_path)?);
-    println!("WACHI_EVENTS_SHA256={}", network::file_sha256(&cfg.events_path)?);
+    println!(
+        "WACHI_EVENTS_SHA256={}",
+        network::file_sha256(&cfg.events_path)?
+    );
     let net = network::load_or_build(&cfg)?;
     println!("red: {}", serde_json::to_string(&net.stats)?);
     Ok(())
@@ -120,10 +120,16 @@ fn batch(cfg: Settings, pares: &str, out: &str) -> Result<()> {
     let rss_carga = rss_max_mb();
     let mut f = std::io::BufWriter::new(std::fs::File::create(out)?);
     let mut tiempos = Vec::new();
-    for line in std::fs::read_to_string(pares)?.lines().filter(|l| !l.trim().is_empty()) {
+    for line in std::fs::read_to_string(pares)?
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+    {
         let p: serde_json::Value = serde_json::from_str(line)?;
         let g = |k: &str, c: &str| p[k][c].as_f64().context("par mal formado");
-        let (o, d) = ((g("origin", "lat")?, g("origin", "lon")?), (g("destination", "lat")?, g("destination", "lon")?));
+        let (o, d) = (
+            (g("origin", "lat")?, g("origin", "lon")?),
+            (g("destination", "lat")?, g("destination", "lon")?),
+        );
         let t = Instant::now();
         let r = eng.route(o, d);
         let ms = t.elapsed().as_secs_f64() * 1000.0;
